@@ -144,7 +144,9 @@ const armMat = new THREE.MeshPhysicalMaterial({
 const armObjects = [];
 let armsShown = localStorage.getItem('cs-arms') !== 'off';
 if (CFG.robots) {
-  loadArms({ ...R, scale: ARM_SCALE, arms: ARM_PLACES }, armMat, slab.material)   // 垫块跟台面同色
+  loadArms({ ...R, scale: ARM_SCALE, arms: ARM_PLACES,
+             beltCells: G.z + 2 * B.marginZ },      // 高台贯穿整个台面进深
+           armMat, slab.material)                   // 高台跟台面同色
     .then(arms => arms.forEach(a => {
       a.visible = armsShown;
       armObjects.push(a);

@@ -50,7 +50,7 @@ function buildArm(spec, geos, material, riserMaterial, cfg, place) {
   zUp.add(linkOf('base_link'));
   zUp.scale.setScalar(cfg.scale);        // 米 -> 格
 
-  /* 实机底座下面垫了 2 cm，连垫块一起画出来，臂才不会悬空 */
+  /* 实机底座下面垫了 2 cm。画成一条贯穿台面进深的高台，臂才不会悬空 */
   const lift = (cfg.lift || 0) * cfg.scale;          // 米 -> 格
   const holder = new THREE.Group();
   holder.position.set(place.x, lift, place.z);
@@ -58,9 +58,10 @@ function buildArm(spec, geos, material, riserMaterial, cfg, place) {
   holder.userData.restY = lift;
   holder.add(zUp);
   if (lift > 0) {
-    const w = cfg.riserMeters * cfg.scale;
+    const w = cfg.riserMeters * cfg.scale;          // 高台宽度（沿臂的朝向）
+    const depth = cfg.beltCells || w;                // 长度：贯穿整个台面进深
     const riser = new THREE.Mesh(
-      new RoundedBoxGeometry(w, lift, w, 3, Math.min(0.05, lift * 0.25)), riserMaterial);
+      new RoundedBoxGeometry(w, lift, depth, 3, Math.min(0.05, lift * 0.25)), riserMaterial);
     riser.position.y = -lift / 2;                    // 从台面顶到底座底
     riser.castShadow = riser.receiveShadow = true;
     holder.add(riser);
