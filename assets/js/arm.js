@@ -7,16 +7,16 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 /* URDF 的 rpy 是绕固定轴 X→Y→Z，等价于 R = Rz·Ry·Rx，对应 three 的 'ZYX' */
 const euler = rpy => new THREE.Euler(rpy[0], rpy[1], rpy[2], 'ZYX');
 
-export async function loadArms(cfg, material) {
+export async function loadArms(cfg, material, riserMaterial = material) {
   const spec = await (await fetch(cfg.dir + cfg.spec)).json();
   const loader = new STLLoader();
   const geos = {};
   await Promise.all([...new Set(Object.values(spec.links).map(l => l.mesh))]
     .map(async mesh => { geos[mesh] = await loader.loadAsync(cfg.dir + mesh); }));
-  return cfg.arms.map(place => buildArm(spec, geos, material, cfg, place));
+  return cfg.arms.map(place => buildArm(spec, geos, material, riserMaterial, cfg, place));
 }
 
-function buildArm(spec, geos, material, cfg, place) {
+function buildArm(spec, geos, material, riserMaterial, cfg, place) {
   const links = {};
   const linkOf = name => (links[name] ||= new THREE.Group());
 
@@ -60,7 +60,7 @@ function buildArm(spec, geos, material, cfg, place) {
   if (lift > 0) {
     const w = cfg.riserMeters * cfg.scale;
     const riser = new THREE.Mesh(
-      new RoundedBoxGeometry(w, lift, w, 3, Math.min(0.05, lift * 0.25)), material);
+      new RoundedBoxGeometry(w, lift, w, 3, Math.min(0.05, lift * 0.25)), riserMaterial);
     riser.position.y = -lift / 2;                    // 从台面顶到底座底
     riser.castShadow = riser.receiveShadow = true;
     holder.add(riser);
