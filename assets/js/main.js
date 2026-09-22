@@ -84,11 +84,14 @@ const fill = new THREE.DirectionalLight(0xffffff, 0.3);
 fill.position.set(-14, 9, -10);
 scene.add(keyLight, keyLight.target, hemi, fill);
 
-/* 两台 ALOHA 永远贴在台面两端：位置随台面尺寸走，不写死坐标 */
+/* 两台 ALOHA 的间距按实测摆：gapMeters 是两个底座相对边缘之间的净距，
+   加上底座中心到该侧边缘的距离，才是中心距。缩放同样由方块边长推出来。 */
 const R = CFG.robots;
+const ARM_SCALE = 1 / G.cellMeters;                  // 1 米 = 多少格
+const ARM_GAP = R ? (R.gapMeters + 2 * R.baseFrontEdge) / G.cellMeters : 0;   // 中心距（格）
 const ARM_PLACES = R ? [
-  { x: R.inset,       z: R.zFrac * G.z, yaw: 0 },
-  { x: G.x - R.inset, z: R.zFrac * G.z, yaw: Math.PI }
+  { x: G.x / 2 - ARM_GAP / 2, z: R.zFrac * G.z, yaw: 0 },
+  { x: G.x / 2 + ARM_GAP / 2, z: R.zFrac * G.z, yaw: Math.PI }
 ] : [];
 /* 臂座下面那块方格挖空，跟着臂座一起走 */
 const EXCLUDE = ARM_PLACES.map(a => ({
@@ -136,7 +139,7 @@ const armMat = new THREE.MeshPhysicalMaterial({
 const armObjects = [];
 let armsShown = localStorage.getItem('cs-arms') !== 'off';
 if (CFG.robots) {
-  loadArms({ ...R, arms: ARM_PLACES }, armMat)
+  loadArms({ ...R, scale: ARM_SCALE, arms: ARM_PLACES }, armMat)
     .then(arms => arms.forEach(a => {
       a.visible = armsShown;
       armObjects.push(a);

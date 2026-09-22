@@ -1,6 +1,6 @@
 # Cube Sandbox
 
-A WebGL sandbox for building structures out of 2 cm cubes on a robot workbench, with two
+A WebGL sandbox for building structures out of 2.5 cm cubes on a robot workbench, with two
 Trossen **WidowX AI** follower arms (the Trossen AI Stationary pair) parked at the table edges.
 
 **Live:** https://abaka-skills.github.io/iros26/
@@ -37,13 +37,14 @@ so nothing floats. **Save** writes the layout to JSON; **Reset** clears the tabl
 
 Everything tunable lives in [`config.json`](config.json) — no build step, no rebuild:
 
-- `grid` — table size in cells and `cellMeters` (0.02, i.e. 2 cm cubes)
+- `grid` — table size in cells and `cellMeters` (0.025, i.e. 2.5 cm cubes)
 - `cubes` — the six colours (palette swatches and 3D blocks share these values)
 - `style`, `themes` — material, lighting and the dark/light palettes
 - `camera` — rotation step, elevations, `fitPadding` (framing is computed from the table size)
 - `interaction` — spring stiffness, hover height, cursor lead
-- `robots` — `scale`, rest `pose`, `inset`/`zFrac` (the arms always sit at the two table edges)
-  and `baseCells` (the grid is cut away under each base)
+- `robots` — rest `pose`, `zFrac`, `baseCells` (the grid is cut away under each base) and
+  `gapMeters`: the measured clear gap between the two robot bases (0.8382 m = 33 in). Arm
+  spacing and scale are derived from it and from `cellMeters`, so both follow the real rig
 
 ## Attribution
 

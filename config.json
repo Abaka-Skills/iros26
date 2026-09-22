@@ -4,7 +4,7 @@
     "x": 44,
     "z": 40,
     "maxHeight": 16,
-    "cellMeters": 0.02
+    "cellMeters": 0.025
   },
   "cubes": [
     {
@@ -108,7 +108,6 @@
     "dir": "./assets/meshes/wxai/",
     "spec": "wxai_follower.json",
     "source": "TrossenRobotics/trossen_arm_description · WidowX AI (Trossen AI Stationary follower)",
-    "scale": 50,
     "pose": {
       "joint_0": 0,
       "joint_1": 0,
@@ -120,9 +119,10 @@
       "right_carriage_joint": 0
     },
     "dropHeight": 1,
-    "inset": 3,
     "zFrac": 0.5,
-    "baseCells": 6
+    "baseCells": 6,
+    "gapMeters": 0.8382,
+    "baseFrontEdge": 0.0372
   },
   "board": {
     "marginX": 0.6,
