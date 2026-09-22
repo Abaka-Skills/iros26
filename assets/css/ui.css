@@ -42,7 +42,7 @@ body{
 }
 .chip{display:flex;align-items:center;gap:8px;padding:8px 10px}
 #brand{top:18px;left:18px;height:var(--bar-h);padding:0 8px 0 16px;letter-spacing:-.01em}
-#aloha{margin-left:6px;font-size:11.5px;letter-spacing:.04em}
+#aloha{margin-left:2px;font-size:11.5px;letter-spacing:.04em}
 #brand b{font-weight:600;font-size:13.5px}
 #brand .sub,.sub{color:var(--muted);font-variant-numeric:tabular-nums}
 #topright{top:18px;right:18px;height:var(--bar-h)}

@@ -2,7 +2,7 @@
 export const STRINGS = {
   zh: {
     label: '中',
-    save: '保存', reset: '重置', resetConfirm: '确认重置',
+    save: '保存', reset: '重置', resetConfirm: '确认?',
     tipTheme: '切换深 / 浅背景',
     tipSave: '保存 layout.json',
     tipReset: '清空所有方块并复位视角',
@@ -33,7 +33,7 @@ export const STRINGS = {
   },
   en: {
     label: 'EN',
-    save: 'Save', reset: 'Reset', resetConfirm: 'Confirm',
+    save: 'Save', reset: 'Reset', resetConfirm: 'Sure?',
     tipTheme: 'Toggle dark / light',
     tipSave: 'Save layout.json',
     tipReset: 'Clear all blocks and reset the view',

@@ -5,7 +5,8 @@ import { STRINGS } from './i18n.js';
 import { loadArms } from './arm.js';
 
 /* ============================ 语言 ============================ */
-let lang = localStorage.getItem('cs-lang') === 'en' ? 'en' : 'zh';
+const DEFAULT_LANG = 'en';                           // 首次访问的默认语言
+let lang = localStorage.getItem('cs-lang') || DEFAULT_LANG;
 let L = STRINGS[lang];
 
 /* ============================ config ============================ */
@@ -710,9 +711,9 @@ function reserveWidths() {
   };
   const both = key => ['zh', 'en'].map(lg => STRINGS[lg][key]);
   measure(document.getElementById('save'), both('save'));
-  measure(document.getElementById('clear'), [...both('reset'), ...both('resetConfirm')]);
+  measure(document.getElementById('clear'), both('reset'));
   measure(document.getElementById('gridlabel'),
-    ['zh', 'en'].map(lg => `${G.x} × ${G.z} · ${STRINGS[lg].blocks(888)}`));
+    ['zh', 'en'].map(lg => `${G.x} × ${G.z} · ${STRINGS[lg].blocks(88)}`));
 }
 
 const toastEl = document.getElementById('toast');
