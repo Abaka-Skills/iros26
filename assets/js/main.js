@@ -281,7 +281,7 @@ function applyTheme(name) {
   slab.material.color.set(t.board);
   armMat.color.set(t.robot);
   gridMat.color.set(t.gridLine); gridMat.opacity = t.gridOpacity;
-  THEME_LIFT = name === 'dark' ? 0.16 : -0.1;
+  THEME_LIFT = t.markerLift ?? (name === 'dark' ? 0.16 : -0.1);
   document.documentElement.style.setProperty('--vignette', t.vignette);
   document.documentElement.style.setProperty('--grain', t.grain);
   localStorage.setItem('cs-theme', name);

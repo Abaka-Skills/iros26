@@ -72,7 +72,7 @@
   "themes": {
     "dark": {
       "bg": "#1a1714",
-      "board": "#3a352f",
+      "board": "#d5c8b7",
       "key": "#ffe8cd",
       "keyIntensity": 2.6,
       "hemiSky": "#ffeedc",
@@ -80,11 +80,12 @@
       "hemiIntensity": 0.55,
       "fill": 0.16,
       "env": 0.22,
-      "gridLine": "#ffffff",
-      "gridOpacity": 0.075,
+      "gridLine": "#3a332b",
+      "gridOpacity": 0.13,
       "vignette": 0.42,
       "grain": 0.16,
-      "robot": "#3b3d42"
+      "robot": "#3b3d42",
+      "markerLift": -0.1
     },
     "light": {
       "bg": "#efe9e2",
@@ -100,7 +101,8 @@
       "gridOpacity": 0.13,
       "vignette": 0.14,
       "grain": 0.2,
-      "robot": "#3a3c40"
+      "robot": "#3a3c40",
+      "markerLift": -0.1
     }
   },
   "robots": {
