@@ -44,8 +44,9 @@ Everything tunable lives in [`config.json`](config.json) — no build step, no r
 - `camera` — rotation step, elevations, `fitPadding` (framing is computed from the table size)
 - `interaction` — spring stiffness, hover height, cursor lead
 - `robots` — rest `pose`, `zFrac`, `baseCells` (the grid is cut away under each base) and
-  `gapMeters`: the measured clear gap between the two robot bases (0.8382 m = 33 in). Arm
-  spacing and scale are derived from it and from `cellMeters`, so both follow the real rig
+  `gapMeters`: the measured clear gap between the two robot bases (0.8382 m = 33 in), and
+  `lift`/`riserMeters` for the 2 cm plate each base stands on. Arm spacing and scale are
+  derived from these and from `cellMeters`, so they follow the real rig
 
 ## Attribution
 

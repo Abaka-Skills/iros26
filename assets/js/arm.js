@@ -2,6 +2,7 @@
    按官方 URDF 的关节原点装配 STL。网格与关节数据来自 TrossenRobotics/trossen_arm_description。 */
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 /* URDF 的 rpy 是绕固定轴 X→Y→Z，等价于 R = Rz·Ry·Rx，对应 three 的 'ZYX' */
 const euler = rpy => new THREE.Euler(rpy[0], rpy[1], rpy[2], 'ZYX');
@@ -49,9 +50,20 @@ function buildArm(spec, geos, material, cfg, place) {
   zUp.add(linkOf('base_link'));
   zUp.scale.setScalar(cfg.scale);        // 米 -> 格
 
+  /* 实机底座下面垫了 2 cm，连垫块一起画出来，臂才不会悬空 */
+  const lift = (cfg.lift || 0) * cfg.scale;          // 米 -> 格
   const holder = new THREE.Group();
-  holder.position.set(place.x, 0, place.z);
+  holder.position.set(place.x, lift, place.z);
   holder.rotation.y = place.yaw;
+  holder.userData.restY = lift;
   holder.add(zUp);
+  if (lift > 0) {
+    const w = cfg.riserMeters * cfg.scale;
+    const riser = new THREE.Mesh(
+      new RoundedBoxGeometry(w, lift, w, 3, Math.min(0.05, lift * 0.25)), material);
+    riser.position.y = -lift / 2;                    // 从台面顶到底座底
+    riser.castShadow = riser.receiveShadow = true;
+    holder.add(riser);
+  }
   return holder;
 }

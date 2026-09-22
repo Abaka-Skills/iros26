@@ -653,10 +653,10 @@ function applyArms(animate) {
   armObjects.forEach(a => {
     a.visible = armsShown;
     if (animate && armsShown) {                     // 出场：掉下来，落地弹一下
-      const drop = CFG.robots.dropHeight;
-      tween(0.2, k => { a.position.y = drop * (1 - k * k); }, () => {
-        a.position.y = 0;
-        tween(0.22, k => { a.position.y = Math.sin(Math.PI * k) * 0.2 * (1 - k); });
+      const drop = CFG.robots.dropHeight, rest = a.userData.restY || 0;
+      tween(0.2, k => { a.position.y = rest + drop * (1 - k * k); }, () => {
+        a.position.y = rest;
+        tween(0.22, k => { a.position.y = rest + Math.sin(Math.PI * k) * 0.2 * (1 - k); });
       });
     }
   });
