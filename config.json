@@ -2,7 +2,7 @@
   "name": "Cube Sandbox · Soft Clay",
   "grid": {
     "x": 44,
-    "z": 40,
+    "z": 30,
     "maxHeight": 16,
     "cellMeters": 0.025
   },
@@ -125,8 +125,8 @@
     "baseFrontEdge": 0.0372
   },
   "board": {
-    "marginX": 0.6,
-    "marginZ": 0.6,
+    "marginX": 0.24,
+    "marginZ": 0.24,
     "thickness": 1.2
   },
   "defaultTheme": "light"

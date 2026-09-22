@@ -25,6 +25,11 @@ const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const easeOutCubic = k => 1 - Math.pow(1 - k, 3);
 const easeOutBack  = k => { const c = 1.9; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
 
+/* 把目标角折算到离当前角最近的等价角，复位时就走最短那条路，而不是把转过的圈退回去 */
+const TAU = Math.PI * 2;
+const nearestAngle = (target, current) =>
+  current + (((target - current + Math.PI) % TAU) + TAU) % TAU - Math.PI;
+
 /* 临界阻尼弹簧：所有「灵动」的来源 */
 function springStep(s, target, stiffness, dt) {
   const d = 2 * Math.sqrt(stiffness);
@@ -636,7 +641,7 @@ function toggleTilt() {
   document.getElementById('tilt').setAttribute('aria-pressed', view.elevIdx > 0);
 }
 function resetView() {
-  view.azimT = 45 * DEG;
+  view.azimT = nearestAngle(45 * DEG, view.azim.v);
   view.elevIdx = 0;
   zoomBase = fitZoom();
   applyZoom();

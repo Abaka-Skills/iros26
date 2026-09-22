@@ -37,7 +37,8 @@ so nothing floats. **Save** writes the layout to JSON; **Reset** clears the tabl
 
 Everything tunable lives in [`config.json`](config.json) — no build step, no rebuild:
 
-- `grid` — table size in cells and `cellMeters` (0.025, i.e. 2.5 cm cubes)
+- `grid` — table size in cells and `cellMeters` (0.025, i.e. 2.5 cm cubes). With `board.margin*`
+  the plate measures 43.8 × 30 in; the 30 in side is the measured depth of the real bench
 - `cubes` — the six colours (palette swatches and 3D blocks share these values)
 - `style`, `themes` — material, lighting and the dark/light palettes
 - `camera` — rotation step, elevations, `fitPadding` (framing is computed from the table size)
