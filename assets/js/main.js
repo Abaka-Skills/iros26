@@ -35,7 +35,15 @@ const S = (v = 0) => ({ v, vel: 0 });
 
 /* 微型补间系统：fn(k) 收到 0..1 的原始进度，自己挑缓动 */
 const tweens = [];
-function tween(dur, fn, onDone) { tweens.push({ t: 0, dur, fn, onDone }); }
+function tween(dur, fn, onDone) {
+  const w = { t: 0, dur, fn, onDone };
+  tweens.push(w);
+  return w;
+}
+function cancelTween(w) {
+  const i = w ? tweens.indexOf(w) : -1;
+  if (i >= 0) tweens.splice(i, 1);
+}
 function stepTweens(dt) {
   for (let i = tweens.length - 1; i >= 0; i--) {
     const w = tweens[i];
@@ -448,12 +456,20 @@ function refreshTarget() {
   if (!t || noPlate) plate.visible = false;
   updateCursor(isBlock, grabbing);
 }
+const HOVER_LIFT = 0.14;
+function liftTo(mesh, to, dur, ease) {
+  cancelTween(mesh.userData.hoverTween);             // 抬起和落回不能同时跑，否则会卡在半路
+  const from = mesh.position.y - mesh.userData.baseY;
+  mesh.userData.hoverTween = tween(dur, k => {
+    mesh.position.y = mesh.userData.baseY + from + (to - from) * ease(k);
+  }, () => { mesh.position.y = mesh.userData.baseY + to; });
+}
 function setHover(mesh) {
   if (state.hover === mesh) return;
   const old = state.hover;
-  if (old && old.parent) tween(0.2, k => { old.position.y = old.userData.baseY + 0.14 * (1 - easeOutCubic(k)); });
+  if (old && old.parent) liftTo(old, 0, 0.2, easeOutCubic);
   state.hover = mesh;
-  if (mesh) tween(0.24, k => { mesh.position.y = mesh.userData.baseY + 0.14 * easeOutBack(k); });
+  if (mesh) liftTo(mesh, HOVER_LIFT, 0.24, easeOutBack);
 }
 function updateCursor(isBlock, grabbing) {
   let c = 'cur-none';
