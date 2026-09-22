@@ -128,5 +128,6 @@
     "marginX": 0.6,
     "marginZ": 0.6,
     "thickness": 1.2
-  }
+  },
+  "defaultTheme": "light"
 }

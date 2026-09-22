@@ -251,7 +251,7 @@ function updateCamera(dt) {
 
 /* ============================ 主题 ============================ */
 let THEME_LIFT = 0.16;            // 落点色的明度补偿：深色底提亮，浅色底压暗
-let themeName = localStorage.getItem('cs-theme') || 'dark';
+let themeName = localStorage.getItem('cs-theme') || CFG.defaultTheme || 'light';
 function applyTheme(name) {
   themeName = name;
   const t = CFG.themes[name];
