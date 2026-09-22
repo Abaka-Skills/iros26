@@ -59,7 +59,7 @@ function buildArm(spec, geos, material, riserMaterial, cfg, place) {
   holder.add(zUp);
   if (lift > 0) {
     const w = cfg.riserMeters * cfg.scale;          // 高台宽度（沿臂的朝向）
-    const depth = cfg.beltCells || w;                // 长度：贯穿整个台面进深
+    const depth = (cfg.beltCells || w) + 2 * (cfg.beltOvershoot || 0);  // 两端探出台沿，接缝藏进圆角
     const riser = new THREE.Mesh(
       new RoundedBoxGeometry(w, lift, depth, 3, Math.min(0.05, lift * 0.25)), riserMaterial);
     riser.position.y = -lift / 2;                    // 从台面顶到底座底

@@ -60,11 +60,18 @@ function stepTweens(dt) {
 }
 const pulse = (mesh, amp = 0.07, dur = 0.32) =>          // 只给落点框用
   tween(dur, k => mesh.scale.setScalar(1 + amp * Math.sin(Math.PI * k) * (1 - k)));
+/* 方块的竖直运动都走这一个槽，互相取消。两条补间同时写 position.y 会把方块留在半空 */
+function yTween(mesh, dur, fn) {
+  cancelTween(mesh.userData.yTween);                 // 新的一条接管，旧的立刻作废
+  const w = tween(dur, fn, () => { mesh.position.y = mesh.userData.baseY; });
+  mesh.userData.yTween = w;
+  return w;                                          // 调用方可以改写 onDone
+}
 /* 方块只在位置上弹一下，不做拉伸变形 */
-const hop = (mesh, amp = 0.09, dur = 0.28) => {
-  const y0 = mesh.userData.baseY ?? mesh.position.y;
-  tween(dur, k => { mesh.position.y = y0 + Math.sin(Math.PI * k) * amp * (1 - k); });
-};
+const hop = (mesh, amp = 0.09, dur = 0.28) =>
+  yTween(mesh, dur, k => {
+    mesh.position.y = mesh.userData.baseY + Math.sin(Math.PI * k) * amp * (1 - k);
+  });
 
 /* ============================ 渲染器 / 场景 ============================ */
 const canvas = document.getElementById('c');
@@ -98,11 +105,12 @@ const ARM_PLACES = R ? [
   { x: G.x / 2 - ARM_GAP / 2, z: R.zFrac * G.z, yaw: 0 },
   { x: G.x / 2 + ARM_GAP / 2, z: R.zFrac * G.z, yaw: Math.PI }
 ] : [];
-/* 臂座下面那块方格挖空，跟着臂座一起走 */
-const EXCLUDE = ARM_PLACES.map(a => ({
-  x: Math.round(a.x - R.baseCells / 2), z: Math.round(a.z - R.baseCells / 2),
-  w: R.baseCells, d: R.baseCells
-}));
+/* 高台占的整条都挖空：高台上放不了方块，网格也不画上去 */
+const BELT_W = R ? (R.riserMeters / G.cellMeters) : 0;      // 高台宽度（格）
+const EXCLUDE = ARM_PLACES.map(a => {
+  const x0 = Math.floor(a.x - BELT_W / 2);
+  return { x: x0, z: 0, w: Math.ceil(a.x + BELT_W / 2) - x0, d: G.z };
+});
 
 /* ---- 底板 + 网格线 ---- */
 const B = CFG.board;
@@ -145,7 +153,7 @@ const armObjects = [];
 let armsShown = localStorage.getItem('cs-arms') !== 'off';
 if (CFG.robots) {
   loadArms({ ...R, scale: ARM_SCALE, arms: ARM_PLACES,
-             beltCells: G.z + 2 * B.marginZ },      // 高台贯穿整个台面进深
+             beltCells: G.z + 2 * B.marginZ, beltOvershoot: 0.35 },   // 贯穿进深，两端略探出
            armMat, slab.material)                   // 高台跟台面同色
     .then(arms => arms.forEach(a => {
       a.visible = armsShown;
@@ -393,10 +401,10 @@ function settleColumn(c) {
     blocks.delete(k3(c.i, m.userData.cell.k, c.j));
     m.userData.cell = { i: c.i, k: m.userData.cell.k - 1, j: c.j };
     m.userData.baseY = m.userData.cell.k + 0.5;
-    const from = m.position.y, to = m.userData.baseY;
-    tween(0.3 + n * 0.02, k => {
-      m.position.y = from + (to - from) * (k * k);   // 加速下落
-    }, () => { m.position.y = to; hop(m, 0.07, 0.26); });
+    const from = m.position.y;
+    yTween(m, 0.3 + n * 0.02, k => {
+      m.position.y = from + (m.userData.baseY - from) * (k * k);   // 加速下落
+    }).onDone = () => { m.position.y = m.userData.baseY; hop(m, 0.07, 0.26); };
   });
   falling.forEach(m => blocks.set(k3(m.userData.cell.i, m.userData.cell.k, m.userData.cell.j), m));
 }
@@ -468,11 +476,10 @@ function refreshTarget() {
 }
 const HOVER_LIFT = 0.14;
 function liftTo(mesh, to, dur, ease) {
-  cancelTween(mesh.userData.hoverTween);             // 抬起和落回不能同时跑，否则会卡在半路
   const from = mesh.position.y - mesh.userData.baseY;
-  mesh.userData.hoverTween = tween(dur, k => {
+  yTween(mesh, dur, k => {
     mesh.position.y = mesh.userData.baseY + from + (to - from) * ease(k);
-  }, () => { mesh.position.y = mesh.userData.baseY + to; });
+  }).onDone = () => { mesh.position.y = mesh.userData.baseY + to; };
 }
 function setHover(mesh) {
   if (state.hover === mesh) return;
