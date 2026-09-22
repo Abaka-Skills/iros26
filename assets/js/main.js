@@ -105,12 +105,16 @@ const ARM_PLACES = R ? [
   { x: G.x / 2 - ARM_GAP / 2, z: R.zFrac * G.z, yaw: 0 },
   { x: G.x / 2 + ARM_GAP / 2, z: R.zFrac * G.z, yaw: Math.PI }
 ] : [];
-/* 高台占的整条都挖空：高台上放不了方块，网格也不画上去 */
+/* 可放置区只有两条高台「之间」：高台本身和它外侧一律挖空 */
 const BELT_W = R ? (R.riserMeters / G.cellMeters) : 0;      // 高台宽度（格）
-const EXCLUDE = ARM_PLACES.map(a => {
-  const x0 = Math.floor(a.x - BELT_W / 2);
-  return { x: x0, z: 0, w: Math.ceil(a.x + BELT_W / 2) - x0, d: G.z };
-});
+const EXCLUDE = [];
+if (R) {
+  const inner = ARM_PLACES.map(a => a.x).sort((p, q) => p - q);
+  const leftEdge = Math.ceil(inner[0] + BELT_W / 2);        // 左侧高台的内边
+  const rightEdge = Math.floor(inner[1] - BELT_W / 2);      // 右侧高台的内边
+  EXCLUDE.push({ x: 0, z: 0, w: leftEdge, d: G.z });
+  EXCLUDE.push({ x: rightEdge, z: 0, w: G.x - rightEdge, d: G.z });
+}
 
 /* ---- 底板 + 网格线 ---- */
 const B = CFG.board;
@@ -153,7 +157,8 @@ const armObjects = [];
 let armsShown = localStorage.getItem('cs-arms') !== 'off';
 if (CFG.robots) {
   loadArms({ ...R, scale: ARM_SCALE, arms: ARM_PLACES,
-             beltCells: G.z + 2 * B.marginZ, beltOvershoot: 0.35 },   // 贯穿进深，两端略探出
+             beltCells: G.z + 2 * B.marginZ, beltRadius: 0.24,
+             beltDrop: B.thickness },                  // 贯穿进深，并与台面连成一体
            armMat, slab.material)                   // 高台跟台面同色
     .then(arms => arms.forEach(a => {
       a.visible = armsShown;

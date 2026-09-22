@@ -59,10 +59,15 @@ function buildArm(spec, geos, material, riserMaterial, cfg, place) {
   holder.add(zUp);
   if (lift > 0) {
     const w = cfg.riserMeters * cfg.scale;          // 高台宽度（沿臂的朝向）
-    const depth = (cfg.beltCells || w) + 2 * (cfg.beltOvershoot || 0);  // 两端探出台沿，接缝藏进圆角
+    const depth = cfg.beltCells || w;              // 端面正好停在台沿上
+    /* 高台一直做到台面底：和桌面连成一块，横切面就是一道平的竖面，没有台阶 */
+    const drop = cfg.beltDrop || 0;
+    const h = lift + drop;
     const riser = new THREE.Mesh(
-      new RoundedBoxGeometry(w, lift, depth, 3, Math.min(0.05, lift * 0.25)), riserMaterial);
-    riser.position.y = -lift / 2;                    // 从台面顶到底座底
+      new RoundedBoxGeometry(w, h, depth, 3,
+        Math.min(cfg.beltRadius ?? 0.05, h / 2 - 0.01, w / 2 - 0.01)),
+      riserMaterial);
+    riser.position.y = -h / 2;                     // 顶面高出台面 lift，底面与台面底齐平
     riser.castShadow = riser.receiveShadow = true;
     holder.add(riser);
   }
