@@ -1,0 +1,132 @@
+{
+  "name": "Cube Sandbox · Soft Clay",
+  "grid": {
+    "x": 44,
+    "z": 40,
+    "maxHeight": 16,
+    "cellMeters": 0.02
+  },
+  "cubes": [
+    {
+      "id": "red",
+      "label": "Red",
+      "color": "#cc5241"
+    },
+    {
+      "id": "orange",
+      "label": "Orange",
+      "color": "#da8441"
+    },
+    {
+      "id": "yellow",
+      "label": "Yellow",
+      "color": "#e0bd54"
+    },
+    {
+      "id": "green",
+      "label": "Green",
+      "color": "#79a665"
+    },
+    {
+      "id": "blue",
+      "label": "Blue",
+      "color": "#4e87b0"
+    },
+    {
+      "id": "purple",
+      "label": "Purple",
+      "color": "#896dad"
+    }
+  ],
+  "style": {
+    "bevel": 0.12,
+    "roughness": 0.97,
+    "sheen": 0.5,
+    "markerDot": 0.115,
+    "markerSpacing": 0.13,
+    "ghostOpacity": 0.3
+  },
+  "camera": {
+    "azimuthStep": 90,
+    "elevations": [
+      34,
+      68
+    ],
+    "zoom": {
+      "default": 20,
+      "min": 5,
+      "max": 60
+    },
+    "springStiffness": 72,
+    "armsOffZoom": 0.82,
+    "fitPadding": 1.32
+  },
+  "interaction": {
+    "hoverHeight": 1.0,
+    "springFree": 110,
+    "springMagnetic": 230,
+    "bobAmount": 0.035,
+    "tiltAmount": 0.018,
+    "cursorLead": 2.0
+  },
+  "themes": {
+    "dark": {
+      "bg": "#1a1714",
+      "board": "#3a352f",
+      "key": "#ffe8cd",
+      "keyIntensity": 2.6,
+      "hemiSky": "#ffeedc",
+      "hemiGround": "#121009",
+      "hemiIntensity": 0.55,
+      "fill": 0.16,
+      "env": 0.22,
+      "gridLine": "#ffffff",
+      "gridOpacity": 0.075,
+      "vignette": 0.42,
+      "grain": 0.16,
+      "robot": "#3b3d42"
+    },
+    "light": {
+      "bg": "#efe9e2",
+      "board": "#d5c8b7",
+      "key": "#fff3e4",
+      "keyIntensity": 1.75,
+      "hemiSky": "#fff6ec",
+      "hemiGround": "#b9a893",
+      "hemiIntensity": 1.05,
+      "fill": 0.32,
+      "env": 0.28,
+      "gridLine": "#3a332b",
+      "gridOpacity": 0.13,
+      "vignette": 0.14,
+      "grain": 0.2,
+      "robot": "#3a3c40"
+    }
+  },
+  "robots": {
+    "model": "wxai_follower",
+    "dir": "./assets/meshes/wxai/",
+    "spec": "wxai_follower.json",
+    "source": "TrossenRobotics/trossen_arm_description · WidowX AI (Trossen AI Stationary follower)",
+    "scale": 50,
+    "pose": {
+      "joint_0": 0,
+      "joint_1": 0,
+      "joint_2": 0,
+      "joint_3": 0,
+      "joint_4": 0,
+      "joint_5": 0,
+      "left_carriage_joint": 0,
+      "right_carriage_joint": 0
+    },
+    "dropHeight": 1,
+    "inset": 3,
+    "zFrac": 0.5,
+    "baseCells": 6
+  },
+  "board": {
+    "marginX": 0.6,
+    "marginZ": 0.6,
+    "thickness": 1.2
+  }
+}

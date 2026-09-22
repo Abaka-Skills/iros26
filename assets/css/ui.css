@@ -1,0 +1,153 @@
+/* Soft Clay UI —— 与 3D 场景同一套质感：磨砂、厚圆角、低对比 */
+:root[data-theme="dark"]{
+  --page:#1a1714; --ink:#efe4d6; --muted:#a29584;
+  --panel:rgba(58,52,46,.58); --panel-b:rgba(255,255,255,.10);
+  --hi:rgba(255,255,255,.07); --shadow:0 10px 30px -14px rgba(0,0,0,.85);
+  --vignette:.42; --grain:.16;
+}
+:root{--bar-h:52px}
+:root[data-theme="light"]{
+  --page:#efe9e2; --ink:#2b2621; --muted:#7c7267;
+  --panel:rgba(255,255,255,.62); --panel-b:rgba(0,0,0,.08);
+  --hi:rgba(0,0,0,.05); --shadow:0 10px 28px -16px rgba(60,45,30,.55);
+  --vignette:.14; --grain:.20;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--page)}
+body{
+  font:13px/1.45 "Inter","Helvetica Neue","PingFang SC",system-ui,sans-serif;
+  color:var(--ink); -webkit-font-smoothing:antialiased;
+  transition:background .5s ease,color .5s ease;
+}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#c.cur-grab{cursor:grab}
+#c.cur-grabbing{cursor:grabbing}
+#c.cur-mine{cursor:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2721%27%20height%3D%2721%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cg%20stroke%3D%27rgba%2820%2C17%2C14%2C.85%29%27%20stroke-width%3D%274.8%27%3E%3Cpath%20d%3D%27M4%206.5h16%27%2F%3E%3Cpath%20d%3D%27M9.4%206.5V5A1.6%201.6%200%200%201%2011%203.4h2A1.6%201.6%200%200%201%2014.6%205v1.5%27%2F%3E%3Cpath%20d%3D%27M6.6%206.5l.8%2012.1A1.7%201.7%200%200%200%209.1%2020.3h5.8a1.7%201.7%200%200%200%201.7-1.7l.8-12.1%27%2F%3E%3Cpath%20d%3D%27M10.3%2010.3v6.2M13.7%2010.3v6.2%27%2F%3E%3C%2Fg%3E%3Cg%20stroke%3D%27rgb%28247%2C238%2C227%29%27%20stroke-width%3D%272.3%27%3E%3Cpath%20d%3D%27M4%206.5h16%27%2F%3E%3Cpath%20d%3D%27M9.4%206.5V5A1.6%201.6%200%200%201%2011%203.4h2A1.6%201.6%200%200%201%2014.6%205v1.5%27%2F%3E%3Cpath%20d%3D%27M6.6%206.5l.8%2012.1A1.7%201.7%200%200%200%209.1%2020.3h5.8a1.7%201.7%200%200%200%201.7-1.7l.8-12.1%27%2F%3E%3Cpath%20d%3D%27M10.3%2010.3v6.2M13.7%2010.3v6.2%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") 6 6, crosshair}
+#c.cur-deny{cursor:not-allowed}
+#c.cur-pan{cursor:all-scroll}
+#c.cur-none{cursor:default}
+
+.fx{position:fixed;inset:0;pointer-events:none;z-index:1}
+
+/* ---- 磨砂面板 ---- */
+.panel{
+  position:fixed;z-index:3;
+  background:var(--panel);
+  border:1px solid var(--panel-b);
+  border-radius:16px;
+  box-shadow:var(--shadow);
+  backdrop-filter:blur(22px) saturate(1.25);
+  -webkit-backdrop-filter:blur(22px) saturate(1.25);
+  transition:background .5s ease,border-color .5s ease;
+}
+.chip{display:flex;align-items:center;gap:8px;padding:8px 10px}
+#brand{top:18px;left:18px;height:var(--bar-h);padding:0 8px 0 16px;letter-spacing:-.01em}
+#aloha{margin-left:6px;font-size:11.5px;letter-spacing:.04em}
+#brand b{font-weight:600;font-size:13.5px}
+#brand .sub,.sub{color:var(--muted);font-variant-numeric:tabular-nums}
+#topright{top:18px;right:18px;height:var(--bar-h)}
+
+.btn{
+  appearance:none;border:1px solid transparent;background:var(--hi);
+  color:var(--ink);font:inherit;font-size:14px;line-height:1;
+  width:36px;height:36px;border-radius:11px;cursor:pointer;
+  display:grid;place-items:center;
+  transition:transform .16s cubic-bezier(.2,.9,.25,1.4),background .2s,border-color .2s;
+}
+.btn.wide{width:auto;padding:0 14px;font-size:12.5px}
+.btn.warn{background:#b23b2e;color:#fff}
+
+/* ---- 中英切换 ---- */
+.lang{
+  position:relative;display:flex;align-items:center;gap:0;
+  height:36px;padding:3px;border-radius:11px;background:var(--hi);
+  cursor:pointer;user-select:none;
+}
+.lang span{
+  position:relative;z-index:1;width:32px;text-align:center;
+  font-size:11.5px;line-height:30px;color:var(--muted);transition:color .25s;
+}
+.lang .knob{
+  position:absolute;top:3px;left:3px;width:32px;height:30px;border-radius:9px;
+  background:var(--ink);
+  transition:transform .3s cubic-bezier(.2,.9,.25,1.45);
+}
+.lang[data-lang="en"] .knob{transform:translateX(32px)}
+.lang[data-lang="zh"] span:nth-of-type(1),
+.lang[data-lang="en"] span:nth-of-type(2){color:var(--page)}
+.btn:hover{background:var(--panel-b)}
+.btn:active{transform:translateY(0) scale(.94)}
+
+/* ---- 调色板 ---- */
+#palette{
+  left:50%;bottom:20px;transform:translateX(-50%);
+  display:flex;gap:8px;padding:9px;
+}
+.sw{
+  position:relative;width:38px;height:38px;border-radius:12px;border:none;padding:0;
+  cursor:pointer;background:none;
+  transition:transform .2s cubic-bezier(.2,.9,.25,1.5);
+}
+.sw i{
+  position:absolute;inset:0;border-radius:12px;display:block;
+  box-shadow:inset 0 -3px 6px rgba(0,0,0,.22),inset 0 2px 4px rgba(255,255,255,.28),0 4px 10px -6px rgba(0,0,0,.6);
+  transition:transform .2s cubic-bezier(.2,.9,.25,1.5);
+}
+.sw em{
+  position:absolute;left:0;right:0;bottom:-14px;text-align:center;
+  font-style:normal;font-size:10px;color:var(--muted);opacity:0;transition:opacity .2s;
+}
+.sw:hover{transform:translateY(-4px)}
+.sw:hover em{opacity:1}
+.sw:active{transform:translateY(-1px) scale(.95)}
+.sw[aria-checked="true"]::after{
+  content:"";position:absolute;inset:-4px;border-radius:16px;
+  border:1.5px solid var(--ink);opacity:.55;
+}
+
+/* 工具按钮：抓取 / 删除 */
+.sw.tool{margin-left:7px}
+.sw.tool::before{
+  content:"";position:absolute;left:-8px;top:5px;bottom:5px;width:1px;background:var(--panel-b);
+}
+.sw.tool + .sw.tool{margin-left:0}
+.sw.tool + .sw.tool::before{display:none}
+.sw.tool i{background:var(--hi);color:var(--ink);display:grid;place-items:center;
+  box-shadow:inset 0 0 0 1.5px var(--panel-b)}
+.sw.tool[aria-checked="true"] i{background:var(--ink);color:var(--page)}
+.sw.tool svg{width:21px;height:21px;display:block}
+
+/* ---- 视角控制 ---- */
+#views{top:18px;left:50%;transform:translateX(-50%);height:var(--bar-h);display:flex;align-items:center;gap:8px;padding:0 8px}
+.btn svg{width:19px;height:19px;display:block}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--page)}
+
+/* ---- 提示行 ---- */
+.hint{
+  position:fixed;left:18px;bottom:26px;z-index:3;
+  display:flex;flex-direction:column;gap:5px;
+  color:var(--muted);font-size:11.5px;pointer-events:none;
+}
+.hint span{display:flex;align-items:center;gap:5px}
+kbd{
+  font:inherit;font-size:10.5px;padding:2px 6px;border-radius:6px;
+  background:var(--panel);border:1px solid var(--panel-b);color:var(--ink);
+}
+
+/* ---- toast ---- */
+.toast{
+  position:fixed;z-index:5;left:50%;top:76px;transform:translate(-50%,-14px);
+  padding:9px 15px;border-radius:12px;font-size:12.5px;
+  background:var(--panel);border:1px solid var(--panel-b);color:var(--ink);
+  backdrop-filter:blur(22px);box-shadow:var(--shadow);
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .35s cubic-bezier(.2,.9,.25,1.4);
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ---- 缺服务器提示 ---- */
+#needserver{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:var(--page)}
+#needserver[hidden]{display:none}
+#needserver .box{position:static;max-width:420px;padding:22px 24px}
+#needserver p{margin:8px 0;color:var(--muted)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.cmd{display:block;margin-top:6px;padding:9px 12px;border-radius:9px;background:var(--hi)}

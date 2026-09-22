@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cube Sandbox · 视觉风格六版</title>
+<style>
+  :root{
+    --ink:#1b1a18;
+    --muted:#6c6862;
+    --line:rgba(0,0,0,.10);
+    --page:#f4f2ee;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--page);
+    color:var(--ink);
+    font:14px/1.5 "Inter","Helvetica Neue","PingFang SC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:40px 32px 64px;
+  }
+  header{max-width:1400px;margin:0 auto 32px}
+  h1{font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
+  header p{margin:0;color:var(--muted);max-width:60ch;font-size:13px}
+  .grid{
+    max-width:1400px;margin:0 auto;
+    display:grid;gap:24px;
+    grid-template-columns:repeat(auto-fit,minmax(400px,1fr));
+  }
+  .card{
+    border:1px solid var(--line);
+    border-radius:14px;
+    overflow:hidden;
+    background:#fff;
+    box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px -16px rgba(0,0,0,.25);
+  }
+  .stage{position:relative;aspect-ratio:4/3;overflow:hidden}
+  .stage canvas{display:block;width:100%;height:100%}
+  .fx{position:absolute;inset:0;pointer-events:none}
+  .meta{padding:14px 16px 16px;border-top:1px solid var(--line)}
+  .row{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .name{font-size:14px;font-weight:600;letter-spacing:-.01em}
+  .num{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .note{margin:6px 0 10px;font-size:12.5px;color:var(--muted)}
+  .sw{display:flex;gap:5px}
+  .sw i{width:22px;height:22px;border-radius:6px;display:block;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Cube Sandbox · 视觉风格六版</h1>
+  <p>同一组 cube、同一个正交相机机位，只有材质 / 灯光 / 配色不同。01–03 在「柔和磨砂质感」这个方向里做变化，04–06 是对照用的另外三条路。选一版（或说你想把哪两版揉在一起），我再去做沙盒本体。</p>
+</header>
+<div class="grid" id="grid"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* ---------- 同一个建筑：voxel 列表 ---------- */
+function building(){
+  const V=[], put=(x,y,z,c)=>V.push({x,y,z,c});
+  for(let x=0;x<8;x++) for(let z=0;z<8;z++) put(x,0,z,0);            // 基座
+  for(let y=1;y<=3;y++) for(let x=1;x<=5;x++) for(let z=1;z<=4;z++){ // 主体（空心）
+    if(x===1||x===5||z===1||z===4) put(x,y,z, y===3?2:1);
+  }
+  for(let x=1;x<=5;x++) for(let z=1;z<=4;z++) put(x,4,z,2);          // 屋顶板
+  for(let y=1;y<=6;y++) put(6,y,6,1);                                // 塔
+  put(6,7,6,3);
+  put(2,5,2,3); put(4,5,3,4);                                        // 屋顶配件
+  put(3,1,6,4); put(2,1,6,1); put(6,1,2,3);                          // 地面配件
+  for(let i=0;i<3;i++) put(0,i>0?i:1,3+i,1);                         // 台阶
+  return V;
+}
+const VOX=building();
+const CENTER=new THREE.Vector3(3.5,2.2,3.5);
+
+/* ---------- 六版风格 ---------- */
+const S=[
+{ key:'clay', num:'01', name:'Soft Clay · 柔和陶土',
+  note:'高粗糙度哑光 + 厚倒角，大面积柔阴影，暖白背景。最贴近你说的「柔和磨砂」。',
+  bg:'#efe9e2', bevel:.14, grain:.20, vignette:.14, env:.35, tone:'aces',
+  pal:['#ded3c6','#e8bda8','#cf7f68','#93a892','#ecd9ab','#7b7269'],
+  mat:c=>new THREE.MeshPhysicalMaterial({color:c,roughness:.98,metalness:0,sheen:.5,sheenRoughness:.95,sheenColor:0xffffff}),
+  light:{key:[7,11,6],keyC:0xfff3e4,keyI:2.1,hemiA:0xfff6ec,hemiB:0xb9a893,hemiI:1.5,fill:.35,shadow:.26,shadowC:0x6d5a47,radius:9}},
+
+{ key:'frost', num:'02', name:'Frosted Acrylic · 磨砂亚克力',
+  note:'半透磨砂，光会在体块里散一点，冷调环境反射。质感更「新」、更轻。',
+  bg:'#e9ecee', bevel:.10, grain:.10, vignette:.12, env:1.0, tone:'aces',
+  pal:['#ccd3d8','#8ab9d2','#5a90b6','#bfa9d8','#94ccba','#767c83'],
+  mat:c=>new THREE.MeshPhysicalMaterial({color:c,roughness:.45,metalness:0,transmission:.18,thickness:.8,ior:1.45,clearcoat:.6,clearcoatRoughness:.7,transparent:true}),
+  light:{key:[6,12,8],keyC:0xffffff,keyI:2.2,hemiA:0xffffff,hemiB:0x9aa6b0,hemiI:1.8,fill:.5,shadow:.16,shadowC:0x44525e,radius:8}},
+
+{ key:'ceramic', num:'03', name:'Matte Ceramic · 哑光陶瓷',
+  note:'缎面粗糙度 + 三点布光带轮廓光，深一点的底色。体块的形最「立」。',
+  bg:'#2e2b28', bevel:.12, grain:.16, vignette:.34, env:.5, tone:'aces',
+  pal:['#cfc6ba','#d9a689','#b06a52','#7d8f86','#e2cfa4','#59524b'],
+  mat:c=>new THREE.MeshPhysicalMaterial({color:c,roughness:.62,metalness:0,clearcoat:.25,clearcoatRoughness:.8}),
+  light:{key:[8,10,5],keyC:0xfff0dd,keyI:2.6,hemiA:0xcdd6e0,hemiB:0x2a2724,hemiI:.9,fill:.25,rim:[-6,6,-8],rimC:0x9fc8ff,rimI:1.6,shadow:.42,shadowC:0x000000,radius:6}},
+
+{ key:'riso', num:'04', name:'Riso Paper · 纸感丝网',
+  note:'平涂三阶明暗 + 细描边 + 重纸纹，没有高光。插画感，做 UI 最省事。',
+  bg:'#f2ece0', bevel:0, grain:.42, vignette:.10, env:0, tone:'none', toon:true,
+  outline:0x2b2622, outlineW:1,
+  pal:['#e6dccb','#e9856f','#3f7f8c','#f0bf4e','#7a6fae','#2b2622'],
+  mat:null,
+  light:{key:[6,10,7],keyC:0xffffff,keyI:2.0,hemiA:0xffffff,hemiB:0xcfc3ae,hemiI:1.4,fill:0,shadow:.14,shadowC:0x3a332b,radius:4}},
+
+{ key:'toy', num:'05', name:'Toy Blocks · 玩具积木',
+  note:'高饱和 + 清漆高光 + 干净硬阴影。最「好玩」，但质感偏塑料、偏吵。',
+  bg:'#f7f7f5', bevel:.08, grain:.06, vignette:.10, env:.9, tone:'aces',
+  pal:['#e8e6e1','#e5453f','#f2b301','#1f7ae0','#2fa96b','#3a3a3a'],
+  mat:c=>new THREE.MeshPhysicalMaterial({color:c,roughness:.3,metalness:0,clearcoat:1,clearcoatRoughness:.12}),
+  light:{key:[7,11,6],keyC:0xffffff,keyI:2.4,hemiA:0xffffff,hemiB:0xc8ccd2,hemiI:1.6,fill:.4,shadow:.22,shadowC:0x1d2634,radius:3}},
+
+{ key:'night', num:'06', name:'Night Matte · 夜色哑光',
+  note:'深灰底 + 去饱和哑光，只有两三块自发光做重点。适合把 UI 全压暗的方案。',
+  bg:'#17181b', bevel:.12, grain:.18, vignette:.40, env:.3, tone:'aces', gridFloor:0x2b2d33,
+  pal:['#3a3d43','#4c5158','#6a7078','#ff8a4c','#5ee0c0','#23252a'],
+  emissive:{3:0xff8a4c, 4:0x5ee0c0},
+  mat:c=>new THREE.MeshPhysicalMaterial({color:c,roughness:.85,metalness:.05,sheen:.3,sheenRoughness:.9}),
+  light:{key:[6,10,4],keyC:0xcfd8ff,keyI:1.5,hemiA:0x6f7aa0,hemiB:0x101114,hemiI:.9,fill:.2,rim:[-7,5,-7],rimC:0xff9a5c,rimI:1.2,shadow:.5,shadowC:0x000000,radius:7}}
+];
+
+/* ---------- toon 用的 3 阶渐变 ---------- */
+function toonRamp(){
+  const d=new Uint8Array([90,90,90,255, 178,178,178,255, 255,255,255,255]);
+  const t=new THREE.DataTexture(d,3,1);
+  t.minFilter=t.magFilter=THREE.NearestFilter; t.needsUpdate=true; return t;
+}
+const RAMP=toonRamp();
+
+/* ---------- 造一个 panel ---------- */
+function panel(st){
+  const card=document.createElement('div'); card.className='card';
+  card.innerHTML=`
+    <div class="stage"><canvas></canvas>
+      <div class="fx" style="background:radial-gradient(120% 90% at 50% 40%,transparent 45%,rgba(0,0,0,${st.vignette}) 100%)"></div>
+      <div class="fx" style="opacity:${st.grain};mix-blend-mode:overlay;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22160%22 height=%22160%22><filter id=%22n%22><feTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%224%22/></filter><rect width=%22160%22 height=%22160%22 filter=%22url(%23n)%22 opacity=%220.55%22/></svg>')"></div>
+    </div>
+    <div class="meta">
+      <div class="row"><span class="name">${st.name}</span><span class="num">${st.num}</span></div>
+      <p class="note">${st.note}</p>
+      <div class="sw">${st.pal.map(c=>`<i style="background:${c}"></i>`).join('')}</div>
+    </div>`;
+  document.getElementById('grid').appendChild(card);
+
+  const canvas=card.querySelector('canvas');
+  const r=new THREE.WebGLRenderer({canvas,antialias:true});
+  r.setPixelRatio(Math.min(devicePixelRatio,2));
+  r.shadowMap.enabled=true; r.shadowMap.type=THREE.PCFSoftShadowMap;
+  r.toneMapping = st.tone==='aces'?THREE.ACESFilmicToneMapping:THREE.NoToneMapping;
+  r.toneMappingExposure=1.0;
+
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(st.bg);
+  if(st.env>0){
+    const pm=new THREE.PMREMGenerator(r);
+    scene.environment=pm.fromScene(new RoomEnvironment(),0.04).texture;
+    scene.environmentIntensity=st.env;
+  }
+
+  const cam=new THREE.OrthographicCamera(-1,1,1,-1,.1,120);
+  cam.position.set(14,13,16); cam.lookAt(CENTER);
+
+  /* 灯 */
+  const L=st.light;
+  const key=new THREE.DirectionalLight(L.keyC,L.keyI);
+  key.position.set(...L.key); key.castShadow=true;
+  key.shadow.mapSize.set(2048,2048);
+  key.shadow.radius=L.radius; key.shadow.bias=-0.0008; key.shadow.normalBias=.02;
+  const c=key.shadow.camera; c.left=-12;c.right=12;c.top=12;c.bottom=-12;c.near=.5;c.far=45; c.updateProjectionMatrix();
+  scene.add(key,key.target); key.target.position.copy(CENTER);
+  scene.add(new THREE.HemisphereLight(L.hemiA,L.hemiB,L.hemiI));
+  if(L.fill){ const f=new THREE.DirectionalLight(0xffffff,L.fill); f.position.set(-8,5,9); scene.add(f); }
+  if(L.rim){ const rl=new THREE.DirectionalLight(L.rimC,L.rimI); rl.position.set(...L.rim); scene.add(rl); }
+
+  /* 地面（接影） */
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(90,90),
+    new THREE.ShadowMaterial({opacity:L.shadow,color:L.shadowC}));
+  floor.rotation.x=-Math.PI/2; floor.position.y=-0.5; floor.receiveShadow=true; scene.add(floor);
+  if(st.gridFloor){ const g=new THREE.GridHelper(60,60,st.gridFloor,st.gridFloor); g.position.y=-0.499; g.material.transparent=true; g.material.opacity=.5; scene.add(g); }
+
+  /* cubes */
+  const geo = st.bevel>0 ? new RoundedBoxGeometry(1,1,1,4,st.bevel) : new THREE.BoxGeometry(1,1,1);
+  const mats = st.pal.map((hex,i)=>{
+    if(st.toon) return new THREE.MeshToonMaterial({color:hex,gradientMap:RAMP});
+    const m=st.mat(new THREE.Color(hex));
+    if(st.emissive&&st.emissive[i]!==undefined){ m.emissive=new THREE.Color(st.emissive[i]); m.emissiveIntensity=1.1; }
+    return m;
+  });
+  const edgeGeo = st.outline!==undefined ? new THREE.EdgesGeometry(geo) : null;
+  const edgeMat = st.outline!==undefined ? new THREE.LineBasicMaterial({color:st.outline}) : null;
+
+  const root=new THREE.Group();
+  for(const v of VOX){
+    const m=new THREE.Mesh(geo,mats[v.c]);
+    m.position.set(v.x,v.y,v.z); m.castShadow=true; m.receiveShadow=true;
+    root.add(m);
+    if(edgeGeo){ const e=new THREE.LineSegments(edgeGeo,edgeMat); e.position.copy(m.position); root.add(e); }
+  }
+  scene.add(root);
+
+  /* 正交视锥按容器比例适配 */
+  function fit(){
+    const w=canvas.clientWidth||400, h=canvas.clientHeight||300;
+    r.setSize(w,h,false);
+    const span=7.6, a=w/h;
+    cam.left=-span*a; cam.right=span*a; cam.top=span; cam.bottom=-span;
+    cam.updateProjectionMatrix();
+    r.render(scene,cam);
+  }
+  new ResizeObserver(fit).observe(canvas);
+  fit();
+}
+
+S.forEach(panel);
+window.__ready=true;
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+/* 界面文案。k 表示渲染成一个 <kbd>，字符串原样输出 */
+export const STRINGS = {
+  zh: {
+    label: '中',
+    save: '保存', reset: '重置', resetConfirm: '确认重置',
+    tipTheme: '切换深 / 浅背景',
+    tipSave: '保存 layout.json',
+    tipReset: '清空所有方块并复位视角',
+    tipLang: '中文 / English',
+    tipArms: '显示 / 隐藏机械臂',
+    tipRotL: '左转 90°（Q）', tipRotR: '右转 90°（E）',
+    tipTilt: '俯视 / 平视（R）', tipView: '重置视角（H）',
+    tipGrab: '抓取：只捡起 / 放下已有方块（0，或按住 Alt）',
+    tipMine: '删除：点掉单个方块，上面的会落下来（X）',
+    colors: ['红', '橙', '黄', '绿', '蓝', '紫'],
+    colorTip: (name, n) => `${name}（${n}）`,
+    blocks: n => `${n} 块`,
+    saved: (n, f) => `已保存 ${n} 块 → ${f}`,
+    cleared: n => (n ? `已清空 ${n} 块，视角已复位` : '视角已复位'),
+    needTitle: '需要本地服务器',
+    needBody: '浏览器不允许 file:// 页面读取 config.json。在项目目录下跑：',
+    needAlt: '或 python3 -m http.server 8000 后打开 localhost:8000',
+    hints: [
+      [{ k: '左键' }, ' 放置'],
+      [{ k: 'Alt' }, '+', { k: '左键' }, ' / ', { k: '0' }, ' 抓取'],
+      [{ k: 'X' }, ' / ', { k: '右键' }, ' 删除'],
+      [{ k: 'Shift' }, '+拖动 连放'],
+      [{ k: 'Q' }, { k: 'E' }, ' 转视角'],
+      [{ k: 'R' }, ' 俯视 · ', { k: 'H' }, ' 重置视角'],
+      [{ k: '滚轮' }, ' 缩放'],
+      [{ k: '中键' }, ' 平移']
+    ]
+  },
+  en: {
+    label: 'EN',
+    save: 'Save', reset: 'Reset', resetConfirm: 'Confirm',
+    tipTheme: 'Toggle dark / light',
+    tipSave: 'Save layout.json',
+    tipReset: 'Clear all blocks and reset the view',
+    tipLang: '中文 / English',
+    tipArms: 'Show / hide the arms',
+    tipRotL: 'Rotate left 90° (Q)', tipRotR: 'Rotate right 90° (E)',
+    tipTilt: 'Top / eye level (R)', tipView: 'Reset view (H)',
+    tipGrab: 'Grab: pick up and drop existing blocks only (0, or hold Alt)',
+    tipMine: 'Delete: knock out one block, the stack above falls (X)',
+    colors: ['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple'],
+    colorTip: (name, n) => `${name} (${n})`,
+    blocks: n => `${n} block${n === 1 ? '' : 's'}`,
+    saved: (n, f) => `Saved ${n} block${n === 1 ? '' : 's'} → ${f}`,
+    cleared: n => (n ? `Cleared ${n} block${n === 1 ? '' : 's'}, view reset` : 'View reset'),
+    needTitle: 'Local server required',
+    needBody: 'Browsers block file:// pages from reading config.json. In the project folder run:',
+    needAlt: 'or python3 -m http.server 8000, then open localhost:8000',
+    hints: [
+      [{ k: 'Left' }, ' place'],
+      [{ k: 'Alt' }, '+', { k: 'Left' }, ' / ', { k: '0' }, ' grab'],
+      [{ k: 'X' }, ' / ', { k: 'Right' }, ' delete'],
+      [{ k: 'Shift' }, '+drag  paint'],
+      [{ k: 'Q' }, { k: 'E' }, ' rotate'],
+      [{ k: 'R' }, ' top view · ', { k: 'H' }, ' reset view'],
+      [{ k: 'Wheel' }, ' zoom'],
+      [{ k: 'Middle' }, ' pan']
+    ]
+  }
+};
