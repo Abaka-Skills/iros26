@@ -42,8 +42,6 @@
     "bevel": 0.12,
     "roughness": 0.97,
     "sheen": 0.5,
-    "markerDot": 0.115,
-    "markerSpacing": 0.13,
     "ghostOpacity": 0.3
   },
   "camera": {

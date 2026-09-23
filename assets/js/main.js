@@ -219,49 +219,19 @@ const inBounds = (i, k, j) =>
   i >= 0 && j >= 0 && k >= 0 && i < G.x && j < G.z && k < G.maxHeight && !blocked(i, j);
 
 /* ---- 落点指示板（磁吸的视觉反馈）---- */
-/* 圆点描边：沿 12 条棱等距撒点，用圆形贴图，所以是圆角点不是方块 dash */
-function dotTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d');
-  g.beginPath();
-  g.arc(32, 32, 27, 0, Math.PI * 2);
-  g.fillStyle = '#fff';
-  g.fill();
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-function boxDots(size, spacing) {
-  const edge = new THREE.EdgesGeometry(new THREE.BoxGeometry(size, size, size)).attributes.position.array;
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), p = new THREE.Vector3(), out = [];
-  for (let i = 0; i < edge.length; i += 6) {
-    a.set(edge[i], edge[i + 1], edge[i + 2]);
-    b.set(edge[i + 3], edge[i + 4], edge[i + 5]);
-    const n = Math.max(1, Math.round(a.distanceTo(b) / spacing));
-    for (let k = 0; k <= n; k++) {
-      p.copy(a).lerp(b, k / n);
-      out.push(p.x, p.y, p.z);
-    }
-  }
-  return new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
-}
-const plate = new THREE.Points(
-  boxDots(1.02, CFG.style.markerSpacing),
-  new THREE.PointsMaterial({
-    map: dotTexture(), size: CFG.style.markerDot, sizeAttenuation: true,
-    transparent: true, opacity: 0.9, alphaTest: 0.45, depthWrite: false
-  })
-);
-plate.visible = false;
-scene.add(plate);
-const plateS = { x: S(), y: S(), z: S() };
-/* 半透明的下落框：落点格里的方块投影 */
+/* 落点指示：落点格里的半透明方块 */
 const ghost = new THREE.Mesh(cubeGeo, new THREE.MeshBasicMaterial({
   transparent: true, opacity: CFG.style.ghostOpacity, depthWrite: false
 }));
 ghost.visible = false;
 scene.add(ghost);
+const ghostS = { x: S(), y: S(), z: S() };
+let markerOn = false;
+function ghostFromHand() {                            // 影子从「手上这一块」起跳，而不是从上一块滑过来
+  for (const [g, h] of [[ghostS.x, hs.x], [ghostS.y, hs.y], [ghostS.z, hs.z]]) {
+    g.v = h.v; g.vel = 0;
+  }
+}
 
 /* ============================ 相机 ============================ */
 const DEG = Math.PI / 180;
@@ -352,6 +322,7 @@ function armPalette() {
   m.material.opacity = 0;                            // 淡入，不做弹性缩放
   scene.add(m);
   held.mesh = m; held.type = state.selected; held.source = 'palette'; held.origin = null;
+  ghostFromHand();
 }
 function disposeHeld() {
   if (!held.mesh) return;
@@ -370,6 +341,7 @@ function pickUp(mesh) {
   held.mesh = mesh; held.type = mesh.userData.type; held.source = 'grid'; held.origin = c;
   hs.x.v = mesh.position.x; hs.y.v = mesh.position.y; hs.z.v = mesh.position.z;
   hs.x.vel = hs.z.vel = 0; hs.y.vel = 4.2;           // 抓起来「弹」一下
+  ghostFromHand();
   rippleNeighbors(c);
 }
 function placeHeld() {
@@ -405,7 +377,7 @@ function placeHeld() {
   });
 
   held.mesh = null; held.source = null;
-  pulse(plate, 0.3, 0.32);
+  pulse(ghost, 0.22, 0.3);
   if (state.tool === 'build') armPalette();
   updateCount();
 }
@@ -505,10 +477,10 @@ function refreshTarget() {
 
   const noPlate = grabbing || state.tool === 'mine';   // 抓取 / 镐子模式不显示落点
   if (t && (!prev || prev.i !== t.i || prev.k !== t.k || prev.j !== t.j)) {
-    plate.visible = !noPlate;
-    if (state.magnetic) pulse(plate, 0.16, 0.26);       // 吸住的一下「咔」
+    markerOn = !noPlate;
+    if (state.magnetic) pulse(ghost, 0.12, 0.26);       // 吸住的一下「咔」
   }
-  if (!t || noPlate) plate.visible = false;
+  if (!t || noPlate) markerOn = false;
   updateCursor(isBlock, grabbing);
 }
 const HOVER_LIFT = 0.14;
@@ -540,7 +512,7 @@ let panning = false, panPrev = null, spaceDown = false;
 
 canvas.addEventListener('pointerenter', () => { pointerOver = true; });
 canvas.addEventListener('pointerleave', () => {
-  pointerOver = false; state.target = null; plate.visible = false; setHover(null);
+  pointerOver = false; state.target = null; markerOn = false; setHover(null);
 });
 canvas.addEventListener('pointermove', e => {
   ptr.x = (e.clientX / innerWidth) * 2 - 1;
@@ -891,18 +863,17 @@ renderer.setAnimationLoop(() => {
     held.mesh.visible = false;
   }
 
-  ghost.visible = plate.visible && !!t && t.valid;
-  if (plate.visible && t) {
-    const stiff = state.magnetic ? IX.springMagnetic : IX.springFree;
-    springStep(plateS.x, t.i + 0.5, stiff, dt);
-    springStep(plateS.z, t.j + 0.5, stiff, dt);
-    springStep(plateS.y, t.k + 0.53, stiff, dt);   // 抬一点，底边不被底板吃掉
-    plate.position.set(plateS.x.v, plateS.y.v, plateS.z.v);
-    plate.material.color.set(t.valid ? CUBES[held.mesh ? held.type : state.selected].color : '#b23b2e');
-    plate.material.color.offsetHSL(0, 0.06, THEME_LIFT);  // 只动明度/饱和，保住方块本来的颜色
-    ghost.position.set(plateS.x.v, plateS.y.v, plateS.z.v);
-    ghost.material.color.copy(plate.material.color);
-    plate.material.opacity = (t.valid ? (state.magnetic ? 1 : 0.85) : 0.9);
+  const ghostWasVisible = ghost.visible;
+  ghost.visible = markerOn && !!t && t.valid;
+  if (ghost.visible && !ghostWasVisible) ghostFromHand();
+  if (ghost.visible) {
+    const gs = state.magnetic ? IX.springMagnetic : IX.springFree;
+    springStep(ghostS.x, t.i + 0.5, gs, dt);
+    springStep(ghostS.y, t.k + 0.5, gs, dt);
+    springStep(ghostS.z, t.j + 0.5, gs, dt);
+    ghost.position.set(ghostS.x.v, ghostS.y.v, ghostS.z.v);
+    ghost.material.color.set(CUBES[held.mesh ? held.type : state.selected].color);
+    ghost.material.color.offsetHSL(0, 0.06, THEME_LIFT);  // 只动明度/饱和，保住方块本来的颜色
   }
 
   renderer.render(scene, cam);
