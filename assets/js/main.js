@@ -202,22 +202,25 @@ if (CFG.robots) {
 
 /* 桌下的地面，以及印在上面的水印。取 Abaka logo 的品牌橙与几何无衬线，压到刚好看得见 */
 function watermarkTexture(color) {
+  const lines = WM.lines;
   const c = document.createElement('canvas');
-  c.width = 4096; c.height = 512;
+  const lineH = 360;
+  c.width = 2048;
+  c.height = lines.length * lineH;
   const g = c.getContext('2d');
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillStyle = color;
-  try { g.letterSpacing = '26px'; } catch {}
-  let size = 300;                                    // 先按大字号量，再缩到画布内，避免两端被切掉
+  try { g.letterSpacing = '18px'; } catch {}
   const font = px => `700 ${px}px Inter, "Helvetica Neue", system-ui, sans-serif`;
+  let size = 300;                                    // 先按大字号量最长那行，再整体缩到画布内
   g.font = font(size);
-  const wide = g.measureText(WM.text).width;
-  if (wide > c.width * 0.96) {
-    size = Math.floor(size * (c.width * 0.96) / wide);
+  const widest = Math.max(...lines.map(t => g.measureText(t).width));
+  if (widest > c.width * 0.94) {
+    size = Math.floor(size * (c.width * 0.94) / widest);
     g.font = font(size);
   }
-  g.fillText(WM.text, c.width / 2, c.height / 2);   // 一行，字号统一
+  lines.forEach((t, i) => g.fillText(t, c.width / 2, lineH * (i + 0.5)));
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
@@ -233,7 +236,9 @@ const markMat = new THREE.MeshBasicMaterial({
   opacity: WM.opacity, depthWrite: false
 });
 const markW = (G.x + 2 * B.marginX) * WM.scale;
-const mark = new THREE.Mesh(new THREE.PlaneGeometry(markW, markW / 8), markMat);
+const markImg = markMat.map.image;
+const markH = markW * markImg.height / markImg.width;
+const mark = new THREE.Mesh(new THREE.PlaneGeometry(markW, markH), markMat);
 mark.rotation.x = -Math.PI / 2;
 mark.renderOrder = 1;
 scene.add(mark);
@@ -245,7 +250,7 @@ floor.position.set(G.x / 2, floorY(), G.z / 2);
 /* 水印始终贴在背对镜头的那条长边外侧；镜头转到另一条长边时先淡出再淡入 */
 let wmSide = 0, wmAlpha = 1, wmFade = null;
 function placeMark(side) {
-  const off = (G.z + 2 * B.marginZ) / 2 + markW / 16 + WM.offset;
+  const off = (G.z + 2 * B.marginZ) / 2 + markH / 2 + WM.offset;
   mark.position.set(G.x / 2, floorY() + 0.01, G.z / 2 - side * off);
   mark.rotation.z = side > 0 ? 0 : Math.PI;          // 翻面，保证顺着屏幕从左读到右
 }
@@ -307,7 +312,7 @@ function ghostFromHand() {                            // 影子从「手上这�
 const DEG = Math.PI / 180;
 const view = {
   azim: S(45 * DEG), azimT: 45 * DEG,
-  elev: S(CAM.elevations[0] * DEG), elevT: CAM.elevations[0] * DEG, tiltIdx: 0,
+  elev: S(CAM.elevations[0] * DEG), elevT: CAM.elevations[0] * DEG,
   zoom: S(CAM.zoom.default), zoomT: CAM.zoom.default,
   target: new THREE.Vector3(G.x / 2, 1.5, G.z / 2)
 };
@@ -647,8 +652,9 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') { spaceDown = true; e.preventDefault(); }
   if (e.key === 'q' || e.key === 'Q') rotate(+1);
   if (e.key === 'e' || e.key === 'E') rotate(-1);
-  if (e.key === 'r' || e.key === 'R') toggleTilt();
-  if (e.key === 'f' || e.key === 'F') frontView();
+  if (e.key === 'r' || e.key === 'R') topView();
+  if (e.key === 'f' || e.key === 'F') faceView(true);
+  if (e.key === 's' || e.key === 'S') faceView(false);
   if (e.key === 'Escape') returnHeld();
   if (e.key === '0') setTool('grab');
   if (e.key === 'x' || e.key === 'X') setTool('mine');
@@ -723,33 +729,42 @@ function selectCube(idx) {
   paintPalette();
   if (held.source !== 'grid') armPalette();
 }
-function rotate(sign) { view.azimT += sign * CAM.azimuthStep * DEG; }
+function rotate(sign) { view.azimT += sign * CAM.azimuthStep * DEG; updateViewButtons(); }
 function setElevation(deg) {                       // 换仰角后重新取景，比例补偿在接近平视时会失效
   view.elevT = deg * DEG;
   zoomBase = fitZoom();
   applyZoom();
-  document.getElementById('tilt').setAttribute('aria-pressed', deg === CAM.elevations[1]);
-  document.getElementById('front').setAttribute('aria-pressed', deg === CAM.frontElevation);
+  updateViewButtons();
 }
-function toggleTilt() {
-  view.tiltIdx = (view.tiltIdx + 1) % CAM.elevations.length;
-  setElevation(CAM.elevations[view.tiltIdx]);
+/* 当前是哪种视角，直接从相机姿态看出来，所以转完 90° 正视/侧视会自己对调 */
+function viewMode() {
+  const near = (a, b) => Math.abs(a - b) < 0.01;
+  if (near(view.elevT, CAM.elevations[1] * DEG)) return 'top';
+  if (near(view.elevT, CAM.frontElevation * DEG)) {
+    return Math.abs(Math.cos(view.azimT)) > 0.7 ? 'front' : 'side';   // 正对长边＝正视
+  }
+  return 'iso';
 }
-function frontView() {                               // 正视图：压到接近平视，并正对一个面
-  view.tiltIdx = 0;
-  const face = Math.round(view.azim.v / Math.PI) * Math.PI;   // 正对长边，而不是短边
-  view.azimT = nearestAngle(face, view.azim.v);
+function updateViewButtons() {
+  const m = viewMode();
+  for (const [id, mode] of [['reset', 'iso'], ['tilt', 'top'], ['front', 'front'], ['side', 'side']]) {
+    document.getElementById(id).setAttribute('aria-pressed', m === mode);
+  }
+}
+function topView() { setElevation(CAM.elevations[1]); }
+function faceView(longEdge) {                        // 正视＝看长边（机械臂的侧面）；侧视＝看短边
+  const q = Math.PI / 2;
+  const k = Math.round((view.azim.v - (longEdge ? 0 : q)) / Math.PI);
+  view.azimT = nearestAngle(k * Math.PI + (longEdge ? 0 : q), view.azim.v);
   setElevation(CAM.frontElevation);
 }
 function resetView() {
   view.azimT = nearestAngle(45 * DEG, view.azim.v);
-  view.tiltIdx = 0;
   view.elevT = CAM.elevations[0] * DEG;
-  document.getElementById('front').setAttribute('aria-pressed', 'false');
   zoomBase = fitZoom();
   applyZoom();
   view.target.set(G.x / 2, 1.5, G.z / 2);
-  document.getElementById('tilt').setAttribute('aria-pressed', 'false');
+  updateViewButtons();
 }
 const alohaBtn = document.getElementById('aloha');
 function applyArms(animate) {
@@ -769,11 +784,12 @@ function applyArms(animate) {
 }
 alohaBtn.onclick = () => { armsShown = !armsShown; applyArms(true); };
 
-document.getElementById('front').onclick = frontView;
+document.getElementById('front').onclick = () => faceView(true);
+document.getElementById('side').onclick = () => faceView(false);
 document.getElementById('reset').onclick = resetView;
 document.getElementById('rotL').onclick = () => rotate(+1);
 document.getElementById('rotR').onclick = () => rotate(-1);
-document.getElementById('tilt').onclick = toggleTilt;
+document.getElementById('tilt').onclick = topView;
 document.getElementById('theme').onclick = () => applyTheme(themeName === 'dark' ? 'light' : 'dark');
 document.getElementById('gridlabel').textContent = `${G.x} × ${G.z}`;
 
@@ -799,6 +815,7 @@ function applyLang(next) {
   set('rotR', null, L.tipRotR);
   set('tilt', null, L.tipTilt);
   set('front', null, L.tipFront);
+  set('side', null, L.tipSide);
   set('reset', null, L.tipView);
   grabBtn.title = L.tipGrab;
   mineBtn.title = L.tipMine;
@@ -916,6 +933,7 @@ addEventListener('resize', resize);
 resize();
 applyTheme(themeName);
 applyLang(lang);
+updateViewButtons();
 zoomBase = fitZoom();
 applyArms();
 view.zoom.v = view.zoomT;                            // 开局直接就位，不做一次缩放动画

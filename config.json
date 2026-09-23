@@ -140,11 +140,14 @@
   },
   "defaultTheme": "light",
   "watermark": {
-    "text": "ABAKA.AI  IROS 2026  PITTSBURGH",
     "color": "#fd5f32",
-    "opacity": 0.16,
-    "scale": 0.95,
+    "opacity": 0.5,
+    "scale": 0.62,
     "drop": 0.6,
-    "offset": 2.5
+    "offset": 2.5,
+    "lines": [
+      "ABAKA.AI",
+      "IROS 2026 PITTSBURGH"
+    ]
   }
 }
