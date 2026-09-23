@@ -9,7 +9,7 @@ export const STRINGS = {
     tipLang: '中文 / English',
     tipArms: '显示 / 隐藏机械臂',
     tipRotL: '左转 90°（Q）', tipRotR: '右转 90°（E）',
-    tipTilt: '俯视 / 平视（R）', tipView: '重置视角（H）',
+    tipTilt: '俯视 / 平视（R）', tipFront: '正视图（F）', tipView: '重置视角（H）',
     tipGrab: '抓取：只捡起 / 放下已有方块（0，或按住 Alt）',
     tipMine: '删除：点掉单个方块，上面的会落下来（X）',
     colors: ['红', '橙', '黄', '绿', '蓝', '紫'],
@@ -26,7 +26,7 @@ export const STRINGS = {
       [{ k: 'X' }, ' / ', { k: '右键' }, ' 删除'],
       [{ k: 'Shift' }, '+拖动 连放'],
       [{ k: 'Q' }, { k: 'E' }, ' 转视角'],
-      [{ k: 'R' }, ' 俯视 · ', { k: 'H' }, ' 重置视角'],
+      [{ k: 'R' }, ' 俯视 · ', { k: 'F' }, ' 正视 · ', { k: 'H' }, ' 重置'],
       [{ k: '滚轮' }, ' 缩放'],
       [{ k: '中键' }, ' 平移']
     ]
@@ -40,7 +40,7 @@ export const STRINGS = {
     tipLang: '中文 / English',
     tipArms: 'Show / hide the arms',
     tipRotL: 'Rotate left 90° (Q)', tipRotR: 'Rotate right 90° (E)',
-    tipTilt: 'Top / eye level (R)', tipView: 'Reset view (H)',
+    tipTilt: 'Top / eye level (R)', tipFront: 'Front view (F)', tipView: 'Reset view (H)',
     tipGrab: 'Grab: pick up and drop existing blocks only (0, or hold Alt)',
     tipMine: 'Delete: knock out one block, the stack above falls (X)',
     colors: ['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple'],
@@ -57,7 +57,7 @@ export const STRINGS = {
       [{ k: 'X' }, ' / ', { k: 'Right' }, ' delete'],
       [{ k: 'Shift' }, '+drag  paint'],
       [{ k: 'Q' }, { k: 'E' }, ' rotate'],
-      [{ k: 'R' }, ' top view · ', { k: 'H' }, ' reset view'],
+      [{ k: 'R' }, ' top · ', { k: 'F' }, ' front · ', { k: 'H' }, ' reset'],
       [{ k: 'Wheel' }, ' zoom'],
       [{ k: 'Middle' }, ' pan']
     ]

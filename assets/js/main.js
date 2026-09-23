@@ -107,17 +107,18 @@ const ARM_PLACES = R ? [
 ] : [];
 /* 可放置区只有两条高台「之间」：高台本身和它外侧一律挖空 */
 const BELT_W = R ? (R.riserMeters / G.cellMeters) : 0;      // 高台宽度（格）
-const EXCLUDE = [];
+const PLAY = { x0: 0, x1: G.x - 1, z0: 0, z1: G.z - 1 };
 if (R) {
   const inner = ARM_PLACES.map(a => a.x).sort((p, q) => p - q);
-  const leftEdge = Math.ceil(inner[0] + BELT_W / 2);        // 左侧高台的内边
-  const rightEdge = Math.floor(inner[1] - BELT_W / 2);      // 右侧高台的内边
-  EXCLUDE.push({ x: 0, z: 0, w: leftEdge, d: G.z });
-  EXCLUDE.push({ x: rightEdge, z: 0, w: G.x - rightEdge, d: G.z });
+  PLAY.x0 = Math.ceil(inner[0] + BELT_W / 2);               // 左侧高台的内边
+  PLAY.x1 = Math.floor(inner[1] - BELT_W / 2) - 1;          // 右侧高台的内边
 }
+/* 再往里收一圈：最外一圈格子不画网格也不允许放置 */
+PLAY.x0 += 1; PLAY.x1 -= 1; PLAY.z0 += 1; PLAY.z1 -= 1;
 
 /* ---- 底板 + 网格线 ---- */
 const B = CFG.board;
+const WM = CFG.watermark;
 const slab = new THREE.Mesh(                        // 台面比网格大一圈，两侧留出放机械臂的地方
   new RoundedBoxGeometry(G.x + 2 * B.marginX, B.thickness, G.z + 2 * B.marginZ, 4, 0.24),
   new THREE.MeshPhysicalMaterial({ roughness: 0.98, metalness: 0, sheen: 0.4, sheenRoughness: 0.95 })
@@ -126,7 +127,7 @@ slab.position.set(G.x / 2, -B.thickness / 2, G.z / 2);
 slab.receiveShadow = true;
 
 /* 网格铺满台面，但抠掉两个臂座占的方块；按格子收集边，避免重复画 */
-const blocked = (i, j) => EXCLUDE.some(e => i >= e.x && i < e.x + e.w && j >= e.z && j < e.z + e.d);
+const blocked = (i, j) => i < PLAY.x0 || i > PLAY.x1 || j < PLAY.z0 || j > PLAY.z1;
 const edges = new Set();
 for (let i = 0; i < G.x; i++) {
   for (let j = 0; j < G.z; j++) {
@@ -199,13 +200,75 @@ if (CFG.robots) {
     .catch(e => console.warn('WidowX 加载失败：', e));
 }
 
+/* 桌下的地面，以及印在上面的水印。取 Abaka logo 的品牌橙与几何无衬线，压到刚好看得见 */
+function watermarkTexture(color) {
+  const c = document.createElement('canvas');
+  c.width = 4096; c.height = 512;
+  const g = c.getContext('2d');
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = color;
+  try { g.letterSpacing = '26px'; } catch {}
+  let size = 300;                                    // 先按大字号量，再缩到画布内，避免两端被切掉
+  const font = px => `700 ${px}px Inter, "Helvetica Neue", system-ui, sans-serif`;
+  g.font = font(size);
+  const wide = g.measureText(WM.text).width;
+  if (wide > c.width * 0.96) {
+    size = Math.floor(size * (c.width * 0.96) / wide);
+    g.font = font(size);
+  }
+  g.fillText(WM.text, c.width / 2, c.height / 2);   // 一行，字号统一
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+const floorMat = new THREE.MeshBasicMaterial();   // 不透明：否则会排在水印之后把它盖掉
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+
+const markMat = new THREE.MeshBasicMaterial({
+  map: watermarkTexture(WM.color), transparent: true,
+  opacity: WM.opacity, depthWrite: false
+});
+const markW = (G.x + 2 * B.marginX) * WM.scale;
+const mark = new THREE.Mesh(new THREE.PlaneGeometry(markW, markW / 8), markMat);
+mark.rotation.x = -Math.PI / 2;
+mark.renderOrder = 1;
+scene.add(mark);
+
+const floorY = () => -B.thickness - WM.drop;
+floor.scale.set((G.x + 2 * B.marginX) * 40, (G.z + 2 * B.marginZ) * 40, 1);  // 够大，正视图里看不到地面尽头
+floor.position.set(G.x / 2, floorY(), G.z / 2);
+
+/* 水印始终贴在背对镜头的那条长边外侧；镜头转到另一条长边时先淡出再淡入 */
+let wmSide = 0, wmAlpha = 1, wmFade = null;
+function placeMark(side) {
+  const off = (G.z + 2 * B.marginZ) / 2 + markW / 16 + WM.offset;
+  mark.position.set(G.x / 2, floorY() + 0.01, G.z / 2 - side * off);
+  mark.rotation.z = side > 0 ? 0 : Math.PI;          // 翻面，保证顺着屏幕从左读到右
+}
+function updateMarkSide() {
+  const side = Math.cos(view.azimT) >= 0 ? 1 : -1;   // 镜头在哪一侧，水印就去对面那条长边
+  if (side === wmSide) return;
+  if (wmSide === 0) { wmSide = side; placeMark(side); return; }
+  wmSide = side;
+  cancelTween(wmFade);
+  wmFade = tween(0.22, k => { wmAlpha = 1 - k; }, () => {
+    placeMark(wmSide);
+    wmFade = tween(0.45, k => { wmAlpha = k; });
+  });
+}
 const pickRoot = new THREE.Group();
 const blocksGroup = new THREE.Group();
 pickRoot.add(slab, blocksGroup);
 scene.add(pickRoot);
 
 /* ---- 方块 ---- */
-const cubeGeo = new RoundedBoxGeometry(1, 1, 1, 4, CFG.style.bevel);
+const CUBE = G.cubeMeters / G.cellMeters;            // 方块边长（格）：2.5cm 本体放进 3cm 的格
+const cellY = k => k * CUBE + CUBE / 2;              // 层间距＝方块本身，堆叠不留缝；缝只在水平方向
+const cubeGeo = new RoundedBoxGeometry(CUBE, CUBE, CUBE, 4, CFG.style.bevel * CUBE);
 const cubeMats = CUBES.map(c => new THREE.MeshPhysicalMaterial({
   color: new THREE.Color(c.color),
   roughness: CFG.style.roughness, metalness: 0,
@@ -227,6 +290,13 @@ ghost.visible = false;
 scene.add(ghost);
 const ghostS = { x: S(), y: S(), z: S() };
 let markerOn = false;
+let ghostAlpha = 1, ghostFade = null;
+function ghostDropFade() {                            // 放下时先让落点方块消失，别和真方块叠在一起
+  cancelTween(ghostFade);
+  ghostFade = tween(0.09, k => { ghostAlpha = 1 - k; }, () => {
+    ghostFade = tween(0.3, k => { ghostAlpha = k; });
+  });
+}
 function ghostFromHand() {                            // 影子从「手上这一块」起跳，而不是从上一块滑过来
   for (const [g, h] of [[ghostS.x, hs.x], [ghostS.y, hs.y], [ghostS.z, hs.z]]) {
     g.v = h.v; g.vel = 0;
@@ -237,18 +307,20 @@ function ghostFromHand() {                            // 影子从「手上这�
 const DEG = Math.PI / 180;
 const view = {
   azim: S(45 * DEG), azimT: 45 * DEG,
-  elev: S(CAM.elevations[0] * DEG), elevIdx: 0,
+  elev: S(CAM.elevations[0] * DEG), elevT: CAM.elevations[0] * DEG, tiltIdx: 0,
   zoom: S(CAM.zoom.default), zoomT: CAM.zoom.default,
   target: new THREE.Vector3(G.x / 2, 1.5, G.z / 2)
 };
 const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 500);
 
 /* 默认缩放按台面大小算出来，换台面尺寸不用再手动调 */
-function fitZoom() {
+function fitZoom(e = view.elevT) {
   const aspect = (canvas.clientWidth || innerWidth) / (canvas.clientHeight || innerHeight);
   const span = (G.x + G.z) * Math.SQRT1_2;          // 等距投影下台面的屏幕跨度
-  const e = CAM.elevations[view.elevIdx] * DEG;
-  const h = Math.max(span / (2 * aspect), span * Math.sin(e) / 2);
+  const tall = R ? CAM.sceneHeight * ARM_SCALE : 8; // 场景的竖直高度（米 -> 格）
+  const h = Math.max(span / (2 * aspect),            // 取最大而不是相加：相加会把常规视角也撑飞
+                     span * Math.sin(e) / 2,
+                     tall * Math.cos(e) / 2);
   return clamp(h * CAM.fitPadding, CAM.zoom.min, CAM.zoom.max);
 }
 
@@ -261,7 +333,7 @@ function applyZoom() {
 
 function updateCamera(dt) {
   springStep(view.azim, view.azimT, CAM.springStiffness, dt);
-  springStep(view.elev, CAM.elevations[view.elevIdx] * DEG, CAM.springStiffness, dt);
+  springStep(view.elev, view.elevT, CAM.springStiffness, dt);
   springStep(view.zoom, view.zoomT, CAM.springStiffness, dt);
 
   const e = view.elev.v, a = view.azim.v;
@@ -296,6 +368,7 @@ function applyTheme(name) {
   scene.environmentIntensity = t.env;
   slab.material.color.set(t.board);
   armMat.color.set(t.robot);
+  floorMat.color.set(t.floor);
   gridMat.color.set(t.gridLine); gridMat.opacity = t.gridOpacity;
   THEME_LIFT = t.markerLift ?? (name === 'dark' ? 0.16 : -0.1);
   document.documentElement.style.setProperty('--vignette', t.vignette);
@@ -355,8 +428,8 @@ function placeHeld() {
   mesh.material = cubeMats[held.type];
   mesh.renderOrder = 0;
   mesh.castShadow = mesh.receiveShadow = true;
-  mesh.position.set(t.i + 0.5, t.k + 0.5, t.j + 0.5);
-  mesh.userData = { cell: { i: t.i, k: t.k, j: t.j }, type: held.type, baseY: t.k + 0.5 };
+  mesh.position.set(t.i + 0.5, cellY(t.k), t.j + 0.5);
+  mesh.userData = { cell: { i: t.i, k: t.k, j: t.j }, type: held.type, baseY: cellY(t.k) };
   blocksGroup.add(mesh);
   blocks.set(k3(t.i, t.k, t.j), mesh);
 
@@ -377,7 +450,7 @@ function placeHeld() {
   });
 
   held.mesh = null; held.source = null;
-  pulse(ghost, 0.22, 0.3);
+  ghostDropFade();
   if (state.tool === 'build') armPalette();
   updateCount();
 }
@@ -409,7 +482,7 @@ function settleColumn(c) {
   falling.forEach((m, n) => {
     blocks.delete(k3(c.i, m.userData.cell.k, c.j));
     m.userData.cell = { i: c.i, k: m.userData.cell.k - 1, j: c.j };
-    m.userData.baseY = m.userData.cell.k + 0.5;
+    m.userData.baseY = cellY(m.userData.cell.k);
     const from = m.position.y;
     yTween(m, 0.3 + n * 0.02, k => {
       m.position.y = from + (m.userData.baseY - from) * (k * k);   // 加速下落
@@ -575,6 +648,7 @@ addEventListener('keydown', e => {
   if (e.key === 'q' || e.key === 'Q') rotate(+1);
   if (e.key === 'e' || e.key === 'E') rotate(-1);
   if (e.key === 'r' || e.key === 'R') toggleTilt();
+  if (e.key === 'f' || e.key === 'F') frontView();
   if (e.key === 'Escape') returnHeld();
   if (e.key === '0') setTool('grab');
   if (e.key === 'x' || e.key === 'X') setTool('mine');
@@ -650,18 +724,28 @@ function selectCube(idx) {
   if (held.source !== 'grid') armPalette();
 }
 function rotate(sign) { view.azimT += sign * CAM.azimuthStep * DEG; }
-function toggleTilt() {
-  const before = CAM.elevations[view.elevIdx] * DEG;
-  view.elevIdx = (view.elevIdx + 1) % CAM.elevations.length;
-  const after = CAM.elevations[view.elevIdx] * DEG;
-  /* 仰角越高，同样的深度在画面上铺得越长——按比例补偿缩放，俯视时底板才不会溢出 */
-  zoomBase = clamp(zoomBase * (Math.sin(after) / Math.sin(before)), CAM.zoom.min, CAM.zoom.max);
+function setElevation(deg) {                       // 换仰角后重新取景，比例补偿在接近平视时会失效
+  view.elevT = deg * DEG;
+  zoomBase = fitZoom();
   applyZoom();
-  document.getElementById('tilt').setAttribute('aria-pressed', view.elevIdx > 0);
+  document.getElementById('tilt').setAttribute('aria-pressed', deg === CAM.elevations[1]);
+  document.getElementById('front').setAttribute('aria-pressed', deg === CAM.frontElevation);
+}
+function toggleTilt() {
+  view.tiltIdx = (view.tiltIdx + 1) % CAM.elevations.length;
+  setElevation(CAM.elevations[view.tiltIdx]);
+}
+function frontView() {                               // 正视图：压到接近平视，并正对一个面
+  view.tiltIdx = 0;
+  const face = Math.round(view.azim.v / Math.PI) * Math.PI;   // 正对长边，而不是短边
+  view.azimT = nearestAngle(face, view.azim.v);
+  setElevation(CAM.frontElevation);
 }
 function resetView() {
   view.azimT = nearestAngle(45 * DEG, view.azim.v);
-  view.elevIdx = 0;
+  view.tiltIdx = 0;
+  view.elevT = CAM.elevations[0] * DEG;
+  document.getElementById('front').setAttribute('aria-pressed', 'false');
   zoomBase = fitZoom();
   applyZoom();
   view.target.set(G.x / 2, 1.5, G.z / 2);
@@ -685,6 +769,7 @@ function applyArms(animate) {
 }
 alohaBtn.onclick = () => { armsShown = !armsShown; applyArms(true); };
 
+document.getElementById('front').onclick = frontView;
 document.getElementById('reset').onclick = resetView;
 document.getElementById('rotL').onclick = () => rotate(+1);
 document.getElementById('rotR').onclick = () => rotate(-1);
@@ -713,6 +798,7 @@ function applyLang(next) {
   set('rotL', null, L.tipRotL);
   set('rotR', null, L.tipRotR);
   set('tilt', null, L.tipTilt);
+  set('front', null, L.tipFront);
   set('reset', null, L.tipView);
   grabBtn.title = L.tipGrab;
   mineBtn.title = L.tipMine;
@@ -806,7 +892,7 @@ document.getElementById('save').onclick = () => {
   const data = {
     version: 1,
     grid: G,
-    exclude: EXCLUDE,
+    play: PLAY,
     palette: CUBES.map(c => ({ id: c.id, color: c.color })),
     blocks: [...blocks.values()].map(m => ({
       x: m.userData.cell.i, y: m.userData.cell.k, z: m.userData.cell.j,
@@ -846,13 +932,15 @@ renderer.setAnimationLoop(() => {
 
   stepTweens(dt);
   updateCamera(dt);
+  updateMarkSide();
+  markMat.opacity = WM.opacity * wmAlpha;
 
   const t = state.target;
   if (held.mesh && t) {
     const stiff = state.magnetic ? IX.springMagnetic : IX.springFree;
     springStep(hs.x, t.i + 0.5, stiff, dt);
     springStep(hs.z, t.j + 0.5, stiff, dt);
-    springStep(hs.y, t.k + 0.5 + IX.hoverHeight, stiff * 0.8, dt);
+    springStep(hs.y, cellY(t.k) + IX.hoverHeight, stiff * 0.8, dt);
     const m = held.mesh;
     m.position.set(hs.x.v, hs.y.v + Math.sin(time * 3.2) * IX.bobAmount, hs.z.v);
     m.rotation.z = clamp(-hs.x.vel * IX.tiltAmount, -0.26, 0.26);   // 往运动方向倾一点
@@ -869,11 +957,12 @@ renderer.setAnimationLoop(() => {
   if (ghost.visible) {
     const gs = state.magnetic ? IX.springMagnetic : IX.springFree;
     springStep(ghostS.x, t.i + 0.5, gs, dt);
-    springStep(ghostS.y, t.k + 0.5, gs, dt);
+    springStep(ghostS.y, cellY(t.k), gs, dt);
     springStep(ghostS.z, t.j + 0.5, gs, dt);
     ghost.position.set(ghostS.x.v, ghostS.y.v, ghostS.z.v);
     ghost.material.color.set(CUBES[held.mesh ? held.type : state.selected].color);
     ghost.material.color.offsetHSL(0, 0.06, THEME_LIFT);  // 只动明度/饱和，保住方块本来的颜色
+    ghost.material.opacity = CFG.style.ghostOpacity * ghostAlpha;
   }
 
   renderer.render(scene, cam);
