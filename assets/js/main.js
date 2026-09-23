@@ -139,12 +139,30 @@ for (let i = 0; i < G.x; i++) {
 const LIFT = R ? R.lift * ARM_SCALE : 0;
 if (R && LIFT > 0) {
   const bw = R.riserMeters * ARM_SCALE;
-  const bh = LIFT + B.thickness;
-  const beltGeo = new RoundedBoxGeometry(bw, bh, G.z + 2 * B.marginZ, 3,
-    Math.min(0.24, bh / 2 - 0.01, bw / 2 - 0.01));
+  const depth = G.z + 2 * B.marginZ;
+  const fil = R.beltFillet ?? 0.3;                  // 台面到高台侧壁的圆滑过渡
+  const top = Math.min(0.12, LIFT / 2);             // 高台顶边的圆角
+  const hw = bw / 2;
+
+  /* 横截面：从台面底一直到高台顶，两侧在台面处用一段凹圆角抹平接缝 */
+  const prof = new THREE.Shape();
+  prof.moveTo(-hw - fil, -B.thickness);
+  prof.lineTo(-hw - fil, 0);
+  prof.quadraticCurveTo(-hw, 0, -hw, fil);
+  prof.lineTo(-hw, LIFT - top);
+  prof.quadraticCurveTo(-hw, LIFT, -hw + top, LIFT);
+  prof.lineTo(hw - top, LIFT);
+  prof.quadraticCurveTo(hw, LIFT, hw, LIFT - top);
+  prof.lineTo(hw, fil);
+  prof.quadraticCurveTo(hw, 0, hw + fil, 0);
+  prof.lineTo(hw + fil, -B.thickness);
+  prof.closePath();
+
+  const beltGeo = new THREE.ExtrudeGeometry(prof, { depth, bevelEnabled: false, curveSegments: 8 });
+  beltGeo.translate(0, 0, -depth / 2);              // 沿进深居中；两端是平切面
   for (const a of ARM_PLACES) {
     const belt = new THREE.Mesh(beltGeo, slab.material);
-    belt.position.set(a.x, LIFT - bh / 2, G.z / 2);
+    belt.position.set(a.x, 0, G.z / 2);
     belt.castShadow = belt.receiveShadow = true;
     scene.add(belt);
   }
@@ -172,11 +190,13 @@ const armObjects = [];
 let armsShown = localStorage.getItem('cs-arms') !== 'off';
 if (CFG.robots) {
   loadArms({ ...R, scale: ARM_SCALE, arms: ARM_PLACES }, armMat)
-    .then(arms => arms.forEach(a => {
-      a.visible = armsShown;
-      armObjects.push(a);
-      scene.add(a);
-    }))
+    .then(arms => {
+      arms.forEach(a => { a.visible = false; armObjects.push(a); scene.add(a); });
+      /* 首次进来让机械臂「掉」进场，但要等网格真的就绪：先编译着色器，
+         再等一帧，否则掉落的头几帧会被首次上传 GPU 卡掉。 */
+      renderer.compile(scene, cam);
+      requestAnimationFrame(() => requestAnimationFrame(() => applyArms(true)));
+    })
     .catch(e => console.warn('WidowX 加载失败：', e));
 }
 
@@ -356,6 +376,7 @@ function pickUp(mesh) {
 function placeHeld() {
   const t = state.target;
   if (!t || !t.valid || !held.mesh) return;
+  if (blockAt(t.i, t.k, t.j)) return;                // 该格已被占：目标是旧的，覆盖会留下孤儿
   const mesh = held.mesh, from = mesh.position.clone();
   const rot = { x: mesh.rotation.x, z: mesh.rotation.z };
 
@@ -509,7 +530,7 @@ function updateCursor(isBlock, grabbing) {
   let c = 'cur-none';
   if (panning) c = 'cur-pan';
   else if (held.source === 'grid') c = 'cur-grabbing';
-  else if (grabbing) c = isBlock ? 'cur-grab' : 'cur-none';
+  else if (grabbing) c = 'cur-grab';                 // 抓取模式下始终显示手
   else if (state.tool === 'mine') c = 'cur-mine';   // 整个删除模式都用垃圾桶光标
   else if (state.target) c = state.target.valid ? 'cur-grabbing' : 'cur-deny';
   canvas.className = c;
@@ -554,6 +575,7 @@ canvas.addEventListener('pointerdown', e => {
     return;
   }
   if (e.button !== 0) return;
+  refreshTarget();                                   // 上一次点击可能已经改变了这一列
 
   if (state.tool === 'mine' && !state.alt) {             // 镐子：敲掉单个方块
     const hit = pick();

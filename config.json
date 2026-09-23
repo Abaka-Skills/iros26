@@ -126,7 +126,8 @@
     "gapMeters": 0.8382,
     "baseFrontEdge": 0.0372,
     "lift": 0.02,
-    "riserMeters": 0.085
+    "riserMeters": 0.085,
+    "beltFillet": 0.3
   },
   "board": {
     "marginX": 0.24,
