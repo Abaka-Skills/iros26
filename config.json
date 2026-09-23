@@ -142,9 +142,9 @@
   "watermark": {
     "color": "#fd5f32",
     "opacity": 0.5,
-    "scale": 0.62,
+    "scale": 0.55,
     "drop": 0.6,
-    "offset": 2.5,
+    "offset": 1.5,
     "lines": [
       "ABAKA.AI",
       "IROS 2026",
