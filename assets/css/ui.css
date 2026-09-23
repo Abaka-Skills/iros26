@@ -123,11 +123,27 @@ body{
 .btn[aria-pressed="true"]{background:var(--ink);color:var(--page)}
 
 /* ---- 提示行 ---- */
+/* 快捷键：平时只是一个键盘图标，悬停展开成说明 */
+#keys{
+  left:18px;bottom:18px;display:flex;align-items:center;
+  min-height:var(--bar-h);padding:0 12px;cursor:default;   /* 收起时是和其它面板同高的正方形 */
+  transition:padding .32s cubic-bezier(.2,.9,.25,1);
+}
+#keys:hover{padding:15px 16px}                               /* 展开后四周留白一致 */
+.keycap{
+  display:block;width:26px;height:26px;overflow:hidden;flex:none;color:var(--muted);
+  transition:width .28s cubic-bezier(.2,.9,.25,1), opacity .18s ease;
+}
+.keycap svg{width:26px;height:26px;display:block}
+#keys:hover .keycap{width:0;opacity:0}                      /* 展开成说明后，图标退场 */
 .hint{
-  position:fixed;left:18px;bottom:26px;z-index:3;
   display:flex;flex-direction:column;gap:5px;
   color:var(--muted);font-size:11.5px;pointer-events:none;
+  max-width:0;max-height:0;opacity:0;overflow:hidden;white-space:nowrap;
+  transition:max-width .32s cubic-bezier(.2,.9,.25,1), max-height .32s cubic-bezier(.2,.9,.25,1),
+             opacity .22s ease, margin-left .32s;
 }
+#keys:hover .hint{max-width:320px;max-height:260px;opacity:1}
 .hint span{display:flex;align-items:center;gap:5px}
 kbd{
   font:inherit;font-size:10.5px;padding:2px 6px;border-radius:6px;

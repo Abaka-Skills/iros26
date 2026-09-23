@@ -33,12 +33,18 @@
   <button class="btn" id="rotL" title="左转 90°（Q）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
   <button class="btn" id="rotR" title="右转 90°（E）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></button>
   <button class="btn" id="reset" aria-pressed="true" title="默认视角（H）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6 20.4 7.3v9.4L12 21.4 3.6 16.7V7.3Z"/><path d="M12 12 20.4 7.3M12 12 3.6 7.3M12 12v9.4"/></svg></button>
-  <button class="btn" id="tilt" aria-pressed="false" title="俯视图（R）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 20.4 12 12 20.4 3.6 12Z"/><path d="M12 8.4 16.8 12 12 15.6 7.2 12Z" opacity=".55"/></svg></button>
+  <button class="btn" id="tilt" aria-pressed="false" title="俯视图（R）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M12 8.6v6.8M8.6 12h6.8"/></svg></button>
   <button class="btn" id="front" aria-pressed="false" title="正视图（F）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="9.5" rx="1.6"/><path d="M2.5 20h19"/></svg></button>
-  <button class="btn" id="side" aria-pressed="false" title="侧视图（S）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="7" width="7" height="9.5" rx="1.6"/><path d="M2.5 20h19"/></svg></button>
 </div>
 
-<div class="hint" id="hint"></div>
+<div class="panel keys" id="keys">
+  <i class="keycap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+    stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2.5" y="6" width="19" height="12" rx="2.2"/>
+    <path d="M6 9.5h.01M9.5 9.5h.01M13 9.5h.01M16.5 9.5h.01M6 13h.01M18 13h.01M9.5 14.5h5"/>
+  </svg></i>
+  <div class="hint" id="hint"></div>
+</div>
 
 <div class="toast" id="toast"></div>
 

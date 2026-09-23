@@ -130,7 +130,7 @@
     "baseFrontEdge": 0.0372,
     "lift": 0.02,
     "riserMeters": 0.085,
-    "beltFillet": 0.25,
+    "beltFillet": 0.12,
     "riserLengthMeters": 0.2
   },
   "board": {
@@ -147,7 +147,10 @@
     "offset": 2.5,
     "lines": [
       "ABAKA.AI",
-      "IROS 2026 PITTSBURGH"
-    ]
+      "IROS 2026",
+      "PITTSBURGH"
+    ],
+    "tracking": 10,
+    "lineHeight": 1.02
   }
 }

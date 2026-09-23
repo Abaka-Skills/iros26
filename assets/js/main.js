@@ -141,15 +141,22 @@ const LIFT = R ? R.lift * ARM_SCALE : 0;
 if (R && LIFT > 0) {
   const rw = (R.riserMeters * ARM_SCALE) / 2;              // 胶囊半宽
   const straight = R.riserLengthMeters * ARM_SCALE - 2 * rw;  // 中间直段
-  const fil = Math.min(R.beltFillet ?? 0.25, LIFT / 2 - 0.02);
+  const fil = Math.min(R.beltFillet ?? 0.25, LIFT / 4);   // 圆角不能吃掉整个高度，否则看着像个枕头
   const half = Math.max(straight, 0) / 2;
 
-  const cap = new THREE.Shape();
-  cap.moveTo(rw, -half);
-  cap.lineTo(rw, half);
-  cap.absarc(0, half, rw, 0, Math.PI, false);
-  cap.lineTo(-rw, -half);
-  cap.absarc(0, -half, rw, Math.PI, Math.PI * 2, false);
+  /* 胶囊轮廓按点列出来，首尾不重合。路径若回到起点，那个重复顶点会让倒角算出错的
+     偏移方向，那一侧就凹进去 */
+  const outline = [];
+  const N = 32;
+  for (let i = 0; i <= N; i++) {                   // 上端半圆：(rw, half) → (-rw, half)
+    const a = (i / N) * Math.PI;
+    outline.push(new THREE.Vector2(rw * Math.cos(a), half + rw * Math.sin(a)));
+  }
+  for (let i = 0; i <= N; i++) {                   // 下端半圆：(-rw, -half) → (rw, -half)
+    const a = Math.PI + (i / N) * Math.PI;
+    outline.push(new THREE.Vector2(rw * Math.cos(a), -half + rw * Math.sin(a)));
+  }
+  const cap = new THREE.Shape(outline);            // 两条直边由相邻点自然连出
 
   /* 倒角同时做出顶面的圆边和落到台面的那圈圆滑过渡 */
   const riserGeo = new THREE.ExtrudeGeometry(cap, {
@@ -204,23 +211,37 @@ if (CFG.robots) {
 function watermarkTexture(color) {
   const lines = WM.lines;
   const c = document.createElement('canvas');
-  const lineH = 360;
   c.width = 2048;
-  c.height = lines.length * lineH;
-  const g = c.getContext('2d');
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillStyle = color;
-  try { g.letterSpacing = '18px'; } catch {}
-  const font = px => `700 ${px}px Inter, "Helvetica Neue", system-ui, sans-serif`;
-  let size = 300;                                    // 先按大字号量最长那行，再整体缩到画布内
-  g.font = font(size);
-  const widest = Math.max(...lines.map(t => g.measureText(t).width));
-  if (widest > c.width * 0.94) {
-    size = Math.floor(size * (c.width * 0.94) / widest);
-    g.font = font(size);
-  }
-  lines.forEach((t, i) => g.fillText(t, c.width / 2, lineH * (i + 0.5)));
+  c.height = 16;                                     // 先量字，量完才知道该多高
+  const font = px => `800 ${px}px "Futura", "Avenir Next", "Century Gothic", ` +
+                     `"Poppins", "Helvetica Neue", system-ui, sans-serif`;
+  const setup = g => {
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
+    g.fillStyle = color;
+    try { g.letterSpacing = WM.tracking + 'px'; } catch {}
+  };
+  const pad = 20;                                    // 留边，否则末字母会被画布切掉
+  const avail = c.width - pad * 2;
+
+  let g = c.getContext('2d');
+  setup(g);
+  /* 每行各自缩放到同一宽度：短的字就大，整块像一个标志 */
+  const sizes = lines.map(t => {
+    g.font = font(400);
+    const m = g.measureText(t);
+    return Math.floor(400 * avail / Math.max(m.width, m.actualBoundingBoxRight || 0));
+  });
+  const rows = sizes.map(px => Math.round(px * WM.lineHeight));
+  c.height = rows.reduce((a, b) => a + b, 0);        // 改尺寸会重置 context，要重新设一遍
+  g = c.getContext('2d');
+  setup(g);
+  let y = 0;
+  lines.forEach((t, i) => {
+    g.font = font(sizes[i]);
+    g.fillText(t, pad, y + rows[i] / 2);
+    y += rows[i];
+  });
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
@@ -251,7 +272,7 @@ floor.position.set(G.x / 2, floorY(), G.z / 2);
 let wmSide = 0, wmAlpha = 1, wmFade = null;
 function placeMark(side) {
   const off = (G.z + 2 * B.marginZ) / 2 + markH / 2 + WM.offset;
-  mark.position.set(G.x / 2, floorY() + 0.01, G.z / 2 - side * off);
+  mark.position.set(G.x / 2, floorY() + 0.01, G.z / 2 - side * off);   // 相对台面居中
   mark.rotation.z = side > 0 ? 0 : Math.PI;          // 翻面，保证顺着屏幕从左读到右
 }
 function updateMarkSide() {
@@ -654,7 +675,6 @@ addEventListener('keydown', e => {
   if (e.key === 'e' || e.key === 'E') rotate(-1);
   if (e.key === 'r' || e.key === 'R') topView();
   if (e.key === 'f' || e.key === 'F') faceView(true);
-  if (e.key === 's' || e.key === 'S') faceView(false);
   if (e.key === 'Escape') returnHeld();
   if (e.key === '0') setTool('grab');
   if (e.key === 'x' || e.key === 'X') setTool('mine');
@@ -740,14 +760,12 @@ function setElevation(deg) {                       // 换仰角后重新取景�
 function viewMode() {
   const near = (a, b) => Math.abs(a - b) < 0.01;
   if (near(view.elevT, CAM.elevations[1] * DEG)) return 'top';
-  if (near(view.elevT, CAM.frontElevation * DEG)) {
-    return Math.abs(Math.cos(view.azimT)) > 0.7 ? 'front' : 'side';   // 正对长边＝正视
-  }
+  if (near(view.elevT, CAM.frontElevation * DEG)) return 'front';
   return 'iso';
 }
 function updateViewButtons() {
   const m = viewMode();
-  for (const [id, mode] of [['reset', 'iso'], ['tilt', 'top'], ['front', 'front'], ['side', 'side']]) {
+  for (const [id, mode] of [['reset', 'iso'], ['tilt', 'top'], ['front', 'front']]) {
     document.getElementById(id).setAttribute('aria-pressed', m === mode);
   }
 }
@@ -785,7 +803,6 @@ function applyArms(animate) {
 alohaBtn.onclick = () => { armsShown = !armsShown; applyArms(true); };
 
 document.getElementById('front').onclick = () => faceView(true);
-document.getElementById('side').onclick = () => faceView(false);
 document.getElementById('reset').onclick = resetView;
 document.getElementById('rotL').onclick = () => rotate(+1);
 document.getElementById('rotR').onclick = () => rotate(-1);
@@ -815,7 +832,6 @@ function applyLang(next) {
   set('rotR', null, L.tipRotR);
   set('tilt', null, L.tipTilt);
   set('front', null, L.tipFront);
-  set('side', null, L.tipSide);
   set('reset', null, L.tipView);
   grabBtn.title = L.tipGrab;
   mineBtn.title = L.tipMine;
