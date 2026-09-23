@@ -22,7 +22,6 @@
   <div class="lang" id="lang" data-lang="zh" role="switch" title="中文 / English">
     <i class="knob"></i><span>中</span><span>EN</span>
   </div>
-  <button class="btn" id="theme" title="切换深/浅背景">◐</button>
   <button class="btn wide" id="save" title="保存 layout.json">保存</button>
   <button class="btn wide" id="clear" title="清空所有方块并复位视角">重置</button>
 </div>
@@ -35,6 +34,11 @@
   <button class="btn" id="reset" aria-pressed="true" title="默认视角（H）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6 20.4 7.3v9.4L12 21.4 3.6 16.7V7.3Z"/><path d="M12 12 20.4 7.3M12 12 3.6 7.3M12 12v9.4"/></svg></button>
   <button class="btn" id="tilt" aria-pressed="false" title="俯视图（R）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M12 8.6v6.8M8.6 12h6.8"/></svg></button>
   <button class="btn" id="front" aria-pressed="false" title="正视图（F）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="9.5" rx="1.6"/><path d="M2.5 20h19"/></svg></button>
+</div>
+
+<div class="panel chip" id="corner">
+  <button class="btn" id="theme" title="切换深/浅背景"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5a7.5 7.5 0 0 1 0 15Z" fill="currentColor"/></svg></button>
+  <button class="btn" id="fullscreen" aria-pressed="false" title="全屏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g class="fs-enter"><path d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15"/></g><g class="fs-exit"><path d="M9 4.5V9H4.5M19.5 9H15V4.5M15 19.5V15h4.5M4.5 15H9v4.5"/></g></svg></button>
 </div>
 
 <div class="panel keys" id="keys">

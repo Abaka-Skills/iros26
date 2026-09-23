@@ -808,6 +808,18 @@ document.getElementById('rotL').onclick = () => rotate(+1);
 document.getElementById('rotR').onclick = () => rotate(-1);
 document.getElementById('tilt').onclick = topView;
 document.getElementById('theme').onclick = () => applyTheme(themeName === 'dark' ? 'light' : 'dark');
+
+/* 全屏：按钮只负责发起，图标跟着浏览器真实的全屏状态走（Esc 退出也能同步） */
+const fsBtn = document.getElementById('fullscreen');
+fsBtn.onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+};
+document.addEventListener('fullscreenchange', () => {
+  const on = !!document.fullscreenElement;
+  fsBtn.setAttribute('aria-pressed', on);
+  fsBtn.title = on ? L.tipFullExit : L.tipFull;
+});
 document.getElementById('gridlabel').textContent = `${G.x} × ${G.z}`;
 
 const langEl = document.getElementById('lang');
@@ -827,6 +839,7 @@ function applyLang(next) {
   set('save', L.save, L.tipSave);
   set('clear', clearArmed ? L.resetConfirm : L.reset, L.tipReset);
   set('theme', null, L.tipTheme);
+  set('fullscreen', null, document.fullscreenElement ? L.tipFullExit : L.tipFull);
   set('aloha', null, L.tipArms);
   set('rotL', null, L.tipRotL);
   set('rotR', null, L.tipRotR);

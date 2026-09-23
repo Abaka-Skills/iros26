@@ -46,6 +46,11 @@ body{
 #brand b{font-weight:600;font-size:13.5px}
 #brand .sub,.sub{color:var(--muted);font-variant-numeric:tabular-nums}
 #topright{top:18px;right:18px;height:var(--bar-h)}
+#corner{right:18px;bottom:18px;height:var(--bar-h)}      /* 右下：主题 + 全屏 */
+#fullscreen .fs-exit{display:none}
+#fullscreen[aria-pressed="true"] .fs-enter{display:none}
+#fullscreen[aria-pressed="true"] .fs-exit{display:inline}
+#fullscreen[aria-pressed="true"]{background:var(--hi);color:var(--ink)}   /* 全屏不是模式开关，别反色 */
 
 .btn{
   appearance:none;border:1px solid transparent;background:var(--hi);
@@ -80,8 +85,8 @@ body{
 
 /* ---- 调色板 ---- */
 #palette{
-  left:50%;bottom:20px;transform:translateX(-50%);
-  display:flex;gap:8px;padding:9px;
+  left:50%;bottom:18px;transform:translateX(-50%);
+  height:var(--bar-h);display:flex;align-items:center;gap:8px;padding:0 9px;   /* 与其它面板同高、同一条底线 */
 }
 .sw{
   position:relative;width:38px;height:38px;border-radius:12px;border:none;padding:0;
