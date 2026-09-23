@@ -21,6 +21,7 @@ function buildArm(spec, geos, material, cfg, place) {
 
   for (const [name, l] of Object.entries(spec.links)) {
     const m = new THREE.Mesh(geos[l.mesh], material);
+    m.name = name;                                   // 方便按连杆名字做测量/调试
     m.position.fromArray(l.xyz);
     m.rotation.copy(euler(l.rpy));
     m.scale.fromArray(l.scale);          // 网格是毫米，URDF 里按 0.001 缩到米
