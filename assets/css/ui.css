@@ -60,7 +60,7 @@ body{
   transition:transform .16s cubic-bezier(.2,.9,.25,1.4),background .2s,border-color .2s;
 }
 .btn.wide{width:auto;padding:0 14px;font-size:12.5px}
-.btn.warn{background:#b23b2e;color:#fff}
+.btn.warn,.btn.warn:hover{background:#b23b2e;color:#fff}   /* 确认态必须压过悬停，否则白字配浅底 */
 
 /* ---- 中英切换 ---- */
 .lang{
