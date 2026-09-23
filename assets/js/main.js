@@ -135,6 +135,21 @@ for (let i = 0; i < G.x; i++) {
     edges.add(`v:${i}:${j}`); edges.add(`v:${i + 1}:${j}`);
   }
 }
+/* 两条高台属于工作台本身：贯穿台面厚度，顶面高出台面 lift，永远在场 */
+const LIFT = R ? R.lift * ARM_SCALE : 0;
+if (R && LIFT > 0) {
+  const bw = R.riserMeters * ARM_SCALE;
+  const bh = LIFT + B.thickness;
+  const beltGeo = new RoundedBoxGeometry(bw, bh, G.z + 2 * B.marginZ, 3,
+    Math.min(0.24, bh / 2 - 0.01, bw / 2 - 0.01));
+  for (const a of ARM_PLACES) {
+    const belt = new THREE.Mesh(beltGeo, slab.material);
+    belt.position.set(a.x, LIFT - bh / 2, G.z / 2);
+    belt.castShadow = belt.receiveShadow = true;
+    scene.add(belt);
+  }
+}
+
 const pts = [];
 for (const key of edges) {
   const [dir, a, b] = key.split(':');
@@ -156,10 +171,7 @@ const armMat = new THREE.MeshPhysicalMaterial({
 const armObjects = [];
 let armsShown = localStorage.getItem('cs-arms') !== 'off';
 if (CFG.robots) {
-  loadArms({ ...R, scale: ARM_SCALE, arms: ARM_PLACES,
-             beltCells: G.z + 2 * B.marginZ, beltRadius: 0.24,
-             beltDrop: B.thickness },                  // 贯穿进深，并与台面连成一体
-           armMat, slab.material)                   // 高台跟台面同色
+  loadArms({ ...R, scale: ARM_SCALE, arms: ARM_PLACES }, armMat)
     .then(arms => arms.forEach(a => {
       a.visible = armsShown;
       armObjects.push(a);

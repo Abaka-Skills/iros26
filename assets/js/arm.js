@@ -2,21 +2,20 @@
    按官方 URDF 的关节原点装配 STL。网格与关节数据来自 TrossenRobotics/trossen_arm_description。 */
 import * as THREE from 'three';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 /* URDF 的 rpy 是绕固定轴 X→Y→Z，等价于 R = Rz·Ry·Rx，对应 three 的 'ZYX' */
 const euler = rpy => new THREE.Euler(rpy[0], rpy[1], rpy[2], 'ZYX');
 
-export async function loadArms(cfg, material, riserMaterial = material) {
+export async function loadArms(cfg, material) {
   const spec = await (await fetch(cfg.dir + cfg.spec)).json();
   const loader = new STLLoader();
   const geos = {};
   await Promise.all([...new Set(Object.values(spec.links).map(l => l.mesh))]
     .map(async mesh => { geos[mesh] = await loader.loadAsync(cfg.dir + mesh); }));
-  return cfg.arms.map(place => buildArm(spec, geos, material, riserMaterial, cfg, place));
+  return cfg.arms.map(place => buildArm(spec, geos, material, cfg, place));
 }
 
-function buildArm(spec, geos, material, riserMaterial, cfg, place) {
+function buildArm(spec, geos, material, cfg, place) {
   const links = {};
   const linkOf = name => (links[name] ||= new THREE.Group());
 
@@ -50,26 +49,12 @@ function buildArm(spec, geos, material, riserMaterial, cfg, place) {
   zUp.add(linkOf('base_link'));
   zUp.scale.setScalar(cfg.scale);        // 米 -> 格
 
-  /* 实机底座下面垫了 2 cm。画成一条贯穿台面进深的高台，臂才不会悬空 */
+  /* 实机底座下面垫了 2 cm；高台本身属于工作台，画在场景里，不随机械臂显隐 */
   const lift = (cfg.lift || 0) * cfg.scale;          // 米 -> 格
   const holder = new THREE.Group();
   holder.position.set(place.x, lift, place.z);
   holder.rotation.y = place.yaw;
   holder.userData.restY = lift;
   holder.add(zUp);
-  if (lift > 0) {
-    const w = cfg.riserMeters * cfg.scale;          // 高台宽度（沿臂的朝向）
-    const depth = cfg.beltCells || w;              // 端面正好停在台沿上
-    /* 高台一直做到台面底：和桌面连成一块，横切面就是一道平的竖面，没有台阶 */
-    const drop = cfg.beltDrop || 0;
-    const h = lift + drop;
-    const riser = new THREE.Mesh(
-      new RoundedBoxGeometry(w, h, depth, 3,
-        Math.min(cfg.beltRadius ?? 0.05, h / 2 - 0.01, w / 2 - 0.01)),
-      riserMaterial);
-    riser.position.y = -h / 2;                     // 顶面高出台面 lift，底面与台面底齐平
-    riser.castShadow = riser.receiveShadow = true;
-    holder.add(riser);
-  }
   return holder;
 }
