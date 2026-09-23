@@ -127,7 +127,8 @@
     "baseFrontEdge": 0.0372,
     "lift": 0.02,
     "riserMeters": 0.085,
-    "beltFillet": 0.3
+    "beltFillet": 0.25,
+    "riserLengthMeters": 0.2
   },
   "board": {
     "marginX": 0.24,

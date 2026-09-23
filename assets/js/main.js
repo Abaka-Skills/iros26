@@ -135,36 +135,35 @@ for (let i = 0; i < G.x; i++) {
     edges.add(`v:${i}:${j}`); edges.add(`v:${i + 1}:${j}`);
   }
 }
-/* 两条高台属于工作台本身：贯穿台面厚度，顶面高出台面 lift，永远在场 */
+/* 两座高台：俯视是胶囊形的小台，坐在台面上。不碰台沿，也就没有剖面可言 */
 const LIFT = R ? R.lift * ARM_SCALE : 0;
 if (R && LIFT > 0) {
-  const bw = R.riserMeters * ARM_SCALE;
-  const depth = G.z + 2 * B.marginZ;
-  const fil = R.beltFillet ?? 0.3;                  // 台面到高台侧壁的圆滑过渡
-  const top = Math.min(0.12, LIFT / 2);             // 高台顶边的圆角
-  const hw = bw / 2;
+  const rw = (R.riserMeters * ARM_SCALE) / 2;              // 胶囊半宽
+  const straight = R.riserLengthMeters * ARM_SCALE - 2 * rw;  // 中间直段
+  const fil = Math.min(R.beltFillet ?? 0.25, LIFT / 2 - 0.02);
+  const half = Math.max(straight, 0) / 2;
 
-  /* 横截面：从台面底一直到高台顶，两侧在台面处用一段凹圆角抹平接缝 */
-  const prof = new THREE.Shape();
-  prof.moveTo(-hw - fil, -B.thickness);
-  prof.lineTo(-hw - fil, 0);
-  prof.quadraticCurveTo(-hw, 0, -hw, fil);
-  prof.lineTo(-hw, LIFT - top);
-  prof.quadraticCurveTo(-hw, LIFT, -hw + top, LIFT);
-  prof.lineTo(hw - top, LIFT);
-  prof.quadraticCurveTo(hw, LIFT, hw, LIFT - top);
-  prof.lineTo(hw, fil);
-  prof.quadraticCurveTo(hw, 0, hw + fil, 0);
-  prof.lineTo(hw + fil, -B.thickness);
-  prof.closePath();
+  const cap = new THREE.Shape();
+  cap.moveTo(rw, -half);
+  cap.lineTo(rw, half);
+  cap.absarc(0, half, rw, 0, Math.PI, false);
+  cap.lineTo(-rw, -half);
+  cap.absarc(0, -half, rw, Math.PI, Math.PI * 2, false);
 
-  const beltGeo = new THREE.ExtrudeGeometry(prof, { depth, bevelEnabled: false, curveSegments: 8 });
-  beltGeo.translate(0, 0, -depth / 2);              // 沿进深居中；两端是平切面
+  /* 倒角同时做出顶面的圆边和落到台面的那圈圆滑过渡 */
+  const riserGeo = new THREE.ExtrudeGeometry(cap, {
+    depth: LIFT - 2 * fil, bevelEnabled: true,
+    bevelThickness: fil, bevelSize: fil, bevelSegments: 4, curveSegments: 24
+  });
+  riserGeo.rotateX(-Math.PI / 2);                          // 挤出方向转成朝上
+  riserGeo.computeBoundingBox();
+  riserGeo.translate(0, -riserGeo.boundingBox.min.y, 0);   // 底面贴台面
+
   for (const a of ARM_PLACES) {
-    const belt = new THREE.Mesh(beltGeo, slab.material);
-    belt.position.set(a.x, 0, G.z / 2);
-    belt.castShadow = belt.receiveShadow = true;
-    scene.add(belt);
+    const riser = new THREE.Mesh(riserGeo, slab.material);
+    riser.position.set(a.x, 0, a.z);
+    riser.castShadow = riser.receiveShadow = true;
+    scene.add(riser);
   }
 }
 
