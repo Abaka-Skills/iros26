@@ -2,7 +2,7 @@
 
 ## Now
 
-Waiting on a layout pick from `panel/layouts.html` (six options, revised for the requirements below) before building the live panel.
+The panel (layout 01) runs on mock data. Next: the backend, so it shows live status and runs mods.
 
 ## Panel requirements (from review, 2026-09-26)
 
@@ -11,6 +11,17 @@ Waiting on a layout pick from `panel/layouts.html` (six options, revised for the
 - A log panel is always on screen.
 
 ## Done
+
+**2026-09-26: panel 01; repo merged into Abaka-Skills/iros26**
+
+- Chose layout 01 "Stage". `panel/index.html` is the panel: rig full-screen, mod browser with live search, category chips and ⌘K; the selected mod's editable params and FSM (the running one with time per state); cameras; log with level/source filters.
+- Removed the arms list: arm status is read off the 3D view (tags plus ghosted absent arms). I also dropped the camera list, since each tile carries its own status dot and fps.
+- Click a camera tile to switch it between RGB and depth.
+- The six-layout board was removed; it is in git history (commit "Add myaloha: …").
+- Git:
+  - This folder is now the repo for github.com/Abaka-Skills/iros26, on top of its history. The Cube Sandbox moved to `visitor_panel/`, and Pages deploys that folder, so the public URL is unchanged.
+  - `thirdparty/lerobot_trossen` is a submodule.
+  - `.gitignore` keeps out `.venv/`, `CLAUDE.md` (as iros26 did before), `_claude_tmp/` and `setup/camera_snapshots/`. Without the snapshots, camera tiles in a fresh clone show "no frame".
 
 **2026-09-26: one environment; layouts revised**
 
@@ -50,18 +61,17 @@ Waiting on a layout pick from `panel/layouts.html` (six options, revised for the
 
 ## Next
 
-1. Pick a layout (or a combination).
-2. Map the IPs: run `uv run python -m myaloha status`, move each arm by hand, and fill in `DEFAULT_ARMS`.
-3. First hardware run: `reset` → `instruction` → `teleop` (one side), watching the FSM log.
-4. Backend: a small HTTP server over `Aloha`. It needs to serve:
+1. Map the IPs: run `uv run python -m myaloha status`, move each arm by hand, and fill in `DEFAULT_ARMS`.
+2. First hardware run: `reset` → `instruction` → `teleop` (one side), watching the FSM log.
+3. Backend: a small HTTP server over `Aloha`. It needs to serve:
    - status polling;
    - run/stop a mod with params;
    - the mod catalog (name, category, params, STATES, TRANSITIONS);
    - a ring buffer of log records (a `logging` handler);
    - the robot's major-state timeline (one segment per state or mod run, with the result).
 
-   Then build the chosen layout against it, replacing `mock.js`.
-5. Cameras into the wrapper (roles from CLAUDE.md: high, low, two wrists), and map which wrist is left or right.
+   Then point `panel/` at it, replacing `mock.js`. Run should send the dock's params.
+4. Cameras into the wrapper (roles from CLAUDE.md: high, low, two wrists), and map which wrist is left or right.
 
 ## Open questions
 

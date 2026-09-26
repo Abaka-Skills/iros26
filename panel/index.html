@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>myaloha panel</title>
+<link rel="stylesheet" href="assets/css/ui.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div class="scene" id="scene"><div class="fx vig"></div><div class="fx grain"></div><div class="tags" id="tags"></div></div>
+
+<div class="panel chip" id="brand"></div>
+<div class="panel chip" id="corner">
+  <button class="btn icon" id="theme" title="Light / dark"></button>
+  <button class="btn stop" id="estop"></button>
+</div>
+
+<div class="panel" id="browser">
+  <label class="search"><span id="search-icon"></span><input id="q" type="search" placeholder="Search mods" autocomplete="off"><kbd>⌘K</kbd></label>
+  <div class="cats" id="cats"></div>
+  <div class="mlist" id="mlist"></div>
+  <div class="mfoot sub" id="mfoot"></div>
+</div>
+
+<div id="cams"></div>
+
+<div class="panel" id="dock">
+  <div id="dock-body"></div>
+  <div id="dock-foot"></div>
+</div>
+
+<div class="panel" id="log"></div>
+
+<script type="module" src="assets/js/main.js"></script>
+</body>
+</html>

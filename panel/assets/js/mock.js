@@ -151,17 +151,6 @@ export const STATUS = {
   }],
 };
 
-/* Major-state history the backend will keep: one segment per state, running ones name their mod. */
-export const TIMELINE = [
-  { state: 'offline', t0: T - 90 },
-  { state: 'idle', t0: T - 73 },
-  { state: 'running', mod: 'reset', result: 'done', t0: T - 52 },
-  { state: 'idle', t0: T - 43.8 },
-  { state: 'running', mod: 'instruction', result: 'stopped', t0: T - 38 },
-  { state: 'idle', t0: T - 21 },
-  { state: 'running', mod: 'teleop', t0: T - 14.5 },
-];
-
 export const LOG = [
   [-78.0, 'info', 'robot', 'connect: 4 arms, 4 cameras requested'],
   [-73.1, 'warn', 'robot', 'leader_right (192.168.10.3) timed out after 5.0 s; marked absent'],
