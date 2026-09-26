@@ -25,6 +25,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .                 # 纯静态站点，整个仓库直接发布
+          path: visitor_panel     # the public page is the cube sandbox in visitor_panel/
       - id: deployment
         uses: actions/deploy-pages@v4
