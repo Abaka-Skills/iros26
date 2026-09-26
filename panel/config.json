@@ -1,0 +1,36 @@
+{
+  "name": "myaloha",
+  "defaultTheme": "light",
+  "unitsPerMeter": 10,
+  "snapshots": "../setup/camera_snapshots/",
+  "rig": {
+    "note": "Metres and degrees. Follower spacing is from the IROS26 tape measurement; leader stand placement is a guess.",
+    "table": { "w": 1.22, "d": 0.76, "thickness": 0.05, "z": 0 },
+    "stand": { "w": 1.0, "d": 0.3, "thickness": 0.05, "z": 0.62 },
+    "arms": {
+      "follower_left":  { "x": -0.4563, "z": 0.0,  "yaw": 0 },
+      "follower_right": { "x":  0.4563, "z": 0.0,  "yaw": 180 },
+      "leader_left":    { "x": -0.30,   "z": 0.62, "yaw": -90 },
+      "leader_right":   { "x":  0.30,   "z": 0.62, "yaw": -90 }
+    },
+    "hideOnLeader": ["camera_mount_d405", "camera_link"],
+    "lift": 0.02
+  },
+  "camera": { "azimuth": 28, "elevation": 32, "padding": 1.06 },
+  "robots": { "dir": "./assets/meshes/wxai/", "spec": "wxai_follower.json" },
+  "themes": {
+    "light": {
+      "bg": "#efe9e2", "board": "#d5c8b7", "stand": "#cbbca8",
+      "follower": "#3a3c40", "leader": "#b58a62", "ghost": "#7c7267", "ghostOpacity": 0.16,
+      "key": "#fff3e4", "keyIntensity": 1.75, "hemiSky": "#fff6ec", "hemiGround": "#b9a893",
+      "hemiIntensity": 1.05, "fill": 0.32, "env": 0.28, "shadow": 0.26, "shadowColor": "#6d5a47"
+    },
+    "dark": {
+      "bg": "#1a1714", "board": "#d5c8b7", "stand": "#bfb09c",
+      "follower": "#3b3d42", "leader": "#b58a62", "ghost": "#5a524a", "ghostOpacity": 0.3,
+      "key": "#ffe8cd", "keyIntensity": 2.6, "hemiSky": "#ffeedc", "hemiGround": "#121009",
+      "hemiIntensity": 0.55, "fill": 0.16, "env": 0.22, "shadow": 0.5, "shadowColor": "#000000"
+    }
+  },
+  "material": { "bevel": 0.12, "roughness": 0.97, "sheen": 0.5 }
+}

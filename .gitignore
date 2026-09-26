@@ -1,0 +1,13 @@
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Hardware output (lab images; regenerate with setup/check_cameras.py)
+setup/camera_snapshots/
+
+# Local notes and scratch (kept out of the public repo, as before the merge)
+CLAUDE.md
+_claude_tmp/
+.DS_Store

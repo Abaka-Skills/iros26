@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>myaloha layouts</title>
+<link rel="stylesheet" href="assets/css/ui.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<header class="board-head" id="head">
+  <div>
+    <h1>myaloha · six panel layouts</h1>
+    <p>Same soft-clay style (IROS26), same status, same rig; only the layout changes. Every layout has three things: a <b>mod browser</b> built for many mods (search, categories; the grey “planned” ones are examples to show scale), the <b>FSM at two levels</b> (the robot's major state and its history, then the running mod's own machine with time spent per state), and an <b>always-visible log</b>. The mock status has teleop running on the left pair with <b>leader R unplugged</b>. Camera frames are the real snapshots. 01–03 keep the rig as the hero; 04–06 lead with something else.</p>
+  </div>
+  <div class="legend">
+    <span><i style="background:#3a3c40"></i>follower</span>
+    <span><i style="background:#b58a62"></i>leader</span>
+    <span><i style="background:transparent;box-shadow:inset 0 0 0 1.5px var(--off)"></i>absent (ghost)</span>
+    <button class="btn" data-theme-btn>Light / dark</button>
+  </div>
+</header>
+<main class="board" id="board"></main>
+
+<script type="module">
+import { LAYOUTS } from './assets/js/layouts.js';
+import { STATUS } from './assets/js/mock.js';
+import { loadArmAssets } from './assets/js/arm.js';
+import { makeScene } from './assets/js/scene.js';
+import * as W from './assets/js/widgets.js';
+
+let CFG;
+try {
+  CFG = await (await fetch('./config.json', { cache: 'no-store' })).json();
+} catch (err) {
+  document.body.innerHTML = '<p style="padding:40px">config.json could not be loaded. Serve the repo over http: <code>python3 -m http.server 8000</code> from ALOHA/, then open <code>http://localhost:8000/panel/layouts.html</code>.</p>';
+  throw err;
+}
+const root = document.documentElement;
+let theme = CFG.defaultTheme;
+try { theme = localStorage.getItem('myaloha-theme') || theme; } catch {}
+root.dataset.theme = theme;
+
+const assets = await loadArmAssets(CFG.robots.dir, CFG.robots.spec);
+const focus = new URLSearchParams(location.search).get('l');
+const scenes = [];
+
+function mount(frame, L, pixelRatio) {
+  frame.innerHTML = L.html(STATUS, CFG.snapshots);
+  frame.querySelectorAll('[data-scene]').forEach(host => {
+    host.insertAdjacentHTML('beforeend', '<div class="fx vig"></div><div class="fx grain"></div><div class="tags"></div>');
+    const sc = makeScene(host, CFG, assets, STATUS, theme, { pixelRatio });
+    const tags = host.querySelector('.tags');
+    host.addEventListener('rendered', () => {
+      tags.innerHTML = W.ARM_ORDER.map(n => {
+        const a = STATUS.arms[n], p = sc.project(n);
+        return `<div class="tag ${a.connected ? '' : 'off'}" style="left:${p.x}px;top:${p.y}px">${W.dot(W.armKind(a))}${W.armLabel(n)}<span class="sub">${W.modeText(a)}</span></div>`;
+      }).join('');
+    });
+    sc.setInsets(L.insets || {});
+    scenes.push(sc);
+  });
+}
+
+if (focus) {
+  document.body.classList.add('focus');
+  document.getElementById('head').remove();
+  const L = LAYOUTS.find(l => l.num === focus.padStart(2, '0')) || LAYOUTS[0];
+  document.title = `myaloha ${L.num} ${L.name}`;
+  const frame = document.createElement('div');
+  frame.className = 'frame';
+  document.getElementById('board').replaceWith(frame);
+  mount(frame, L);
+} else {
+  const board = document.getElementById('board');
+  for (const L of LAYOUTS) {
+    board.insertAdjacentHTML('beforeend', `
+      <article class="card">
+        <div class="viewport"><div class="frame"></div></div>
+        <div class="meta">
+          <div class="row"><span class="name">${L.num} · ${L.name}</span><span class="sub">${L.family} · <a href="?l=${L.num}" target="_blank">open full size ↗</a></span></div>
+          <p class="note">${L.note}</p>
+        </div>
+      </article>`);
+    const vp = board.lastElementChild.querySelector('.viewport');
+    const frame = vp.querySelector('.frame');
+    new ResizeObserver(() => { frame.style.transform = `scale(${vp.clientWidth / 1440})`; }).observe(vp);
+    mount(frame, L, 1);
+  }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('[data-theme-btn]')) return;
+  theme = theme === 'light' ? 'dark' : 'light';
+  root.dataset.theme = theme;
+  try { localStorage.setItem('myaloha-theme', theme); } catch {}
+  scenes.forEach(s => s.setTheme(theme));
+});
+window.__ready = true;
+</script>
+</body>
+</html>

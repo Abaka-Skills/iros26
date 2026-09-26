@@ -1,0 +1,707 @@
+{
+ "model": "wxai_follower",
+ "source": "TrossenRobotics/trossen_arm_description",
+ "links": {
+  "base_link": {
+   "mesh": "base_link.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "link_1": {
+   "mesh": "link_1.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "link_2": {
+   "mesh": "link_2.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "link_3": {
+   "mesh": "link_3.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "link_4": {
+   "mesh": "link_4.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "link_5": {
+   "mesh": "link_5.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "link_6": {
+   "mesh": "link_6.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "carriage_right": {
+   "mesh": "carriage_right.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "carriage_left": {
+   "mesh": "carriage_left.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "camera_mount_d405": {
+   "mesh": "camera_mount_d405.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "camera_link": {
+   "mesh": "d405.stl",
+   "dir": "peripherals",
+   "scale": [
+    0.001,
+    0.001,
+    0.001
+   ],
+   "xyz": [
+    0.0038,
+    -0.009,
+    0.0
+   ],
+   "rpy": [
+    1.5707963267948966,
+    0.0,
+    1.5707963267948966
+   ]
+  },
+  "gripper_left": {
+   "mesh": "gripper_left.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "gripper_right": {
+   "mesh": "gripper_right.stl",
+   "dir": "wxai",
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  }
+ },
+ "joints": [
+  {
+   "name": "joint_0",
+   "type": "revolute",
+   "parent": "base_link",
+   "child": "link_1",
+   "xyz": [
+    0.0,
+    0.0,
+    0.05725
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "limit": [
+    -3.0543261909900767,
+    3.0543261909900767
+   ]
+  },
+  {
+   "name": "joint_1",
+   "type": "revolute",
+   "parent": "link_1",
+   "child": "link_2",
+   "xyz": [
+    0.02,
+    0.0,
+    0.04625
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "limit": [
+    0.0,
+    3.141592653589793
+   ]
+  },
+  {
+   "name": "joint_2",
+   "type": "revolute",
+   "parent": "link_2",
+   "child": "link_3",
+   "xyz": [
+    -0.264,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    -1.0,
+    0.0
+   ],
+   "limit": [
+    0.0,
+    2.356194490192345
+   ]
+  },
+  {
+   "name": "joint_3",
+   "type": "revolute",
+   "parent": "link_3",
+   "child": "link_4",
+   "xyz": [
+    0.245,
+    0.0,
+    0.06
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    -1.0,
+    0.0
+   ],
+   "limit": [
+    -1.5707963267948966,
+    1.5707963267948966
+   ]
+  },
+  {
+   "name": "joint_4",
+   "type": "revolute",
+   "parent": "link_4",
+   "child": "link_5",
+   "xyz": [
+    0.06775,
+    0.0,
+    0.0455
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "limit": [
+    -1.5707963267948966,
+    1.5707963267948966
+   ]
+  },
+  {
+   "name": "joint_5",
+   "type": "revolute",
+   "parent": "link_5",
+   "child": "link_6",
+   "xyz": [
+    0.02895,
+    0.0,
+    -0.0455
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "limit": [
+    -3.141592653589793,
+    3.141592653589793
+   ]
+  },
+  {
+   "name": "right_carriage_joint",
+   "type": "prismatic",
+   "parent": "link_6",
+   "child": "carriage_right",
+   "xyz": [
+    0.0865,
+    -0.023,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    -1.0,
+    0.0
+   ],
+   "limit": [
+    0.0,
+    0.044
+   ]
+  },
+  {
+   "name": "left_carriage_joint",
+   "type": "prismatic",
+   "parent": "link_6",
+   "child": "carriage_left",
+   "xyz": [
+    0.0865,
+    0.023,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "limit": [
+    0.0,
+    0.044
+   ]
+  },
+  {
+   "name": "camera_mount_joint",
+   "type": "fixed",
+   "parent": "link_6",
+   "child": "camera_mount_d405",
+   "xyz": [
+    0.012,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_joint",
+   "type": "fixed",
+   "parent": "camera_mount_d405",
+   "child": "camera_bottom_screw_frame",
+   "xyz": [
+    0.02927207801,
+    0.0,
+    0.03824951197
+   ],
+   "rpy": [
+    0.0,
+    0.3490658503988659,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_link_joint",
+   "type": "fixed",
+   "parent": "camera_bottom_screw_frame",
+   "child": "camera_link",
+   "xyz": [
+    0.01085,
+    0.009,
+    0.021
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_depth_joint",
+   "type": "fixed",
+   "parent": "camera_link",
+   "child": "camera_depth_frame",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_depth_optical_joint",
+   "type": "fixed",
+   "parent": "camera_depth_frame",
+   "child": "camera_depth_optical_frame",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    -1.5707963267948966,
+    0.0,
+    -1.5707963267948966
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_infra1_joint",
+   "type": "fixed",
+   "parent": "camera_link",
+   "child": "camera_infra1_frame",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_infra1_optical_joint",
+   "type": "fixed",
+   "parent": "camera_infra1_frame",
+   "child": "camera_infra1_optical_frame",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    -1.5707963267948966,
+    0.0,
+    -1.5707963267948966
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_infra2_joint",
+   "type": "fixed",
+   "parent": "camera_link",
+   "child": "camera_infra2_frame",
+   "xyz": [
+    0.0,
+    -0.018,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_infra2_optical_joint",
+   "type": "fixed",
+   "parent": "camera_infra2_frame",
+   "child": "camera_infra2_optical_frame",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    -1.5707963267948966,
+    0.0,
+    -1.5707963267948966
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_color_joint",
+   "type": "fixed",
+   "parent": "camera_link",
+   "child": "camera_color_frame",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "camera_color_optical_joint",
+   "type": "fixed",
+   "parent": "camera_color_frame",
+   "child": "camera_color_optical_frame",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    -1.5707963267948966,
+    0.0,
+    -1.5707963267948966
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "left_gripper_joint",
+   "type": "fixed",
+   "parent": "carriage_left",
+   "child": "gripper_left",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "right_gripper_joint",
+   "type": "fixed",
+   "parent": "carriage_right",
+   "child": "gripper_right",
+   "xyz": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  },
+  {
+   "name": "ee_gripper",
+   "type": "fixed",
+   "parent": "link_6",
+   "child": "ee_gripper_link",
+   "xyz": [
+    0.156062,
+    0.0,
+    0.0
+   ],
+   "rpy": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": null,
+   "limit": null
+  }
+ ]
+}

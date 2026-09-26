@@ -1,0 +1,27 @@
+[project]
+name = "myaloha"
+version = "0.1.0"
+description = "Bimanual Trossen WidowX AI setup driven through LeRobot"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "lerobot_robot_trossen",
+  "lerobot_teleoperator_trossen",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+# Our arm controllers run firmware v1.9.0; the driver's major.minor must match.
+override-dependencies = ["trossen-arm==1.9.3"]
+
+[tool.uv.sources]
+lerobot_robot_trossen = { workspace = true }
+lerobot_teleoperator_trossen = { workspace = true }
+
+[tool.uv.workspace]
+members = ["thirdparty/lerobot_trossen/packages/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

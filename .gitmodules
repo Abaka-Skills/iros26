@@ -1,0 +1,3 @@
+[submodule "thirdparty/lerobot_trossen"]
+	path = thirdparty/lerobot_trossen
+	url = https://github.com/TrossenRobotics/lerobot_trossen.git
