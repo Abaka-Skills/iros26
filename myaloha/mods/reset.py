@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from myaloha.mods.base import Mod
+from myaloha.mods.base import Mod, Need
 
 
 class Reset(Mod):
@@ -11,8 +11,8 @@ class Reset(Mod):
 
     @dataclass
     class Params:
-        goal_time: float = 3.0  # seconds per move
-        via_staged: bool = True  # pass through LeRobot's staged pose first, as its disconnect() does
+        goal_time: float = field(default=3.0, metadata={"help": "Seconds per move."})
+        via_staged: bool = field(default=True, metadata={"help": "Pass through LeRobot's staged pose first, as its disconnect() does."})
 
     STATES = {
         "idle": "not started",
@@ -25,6 +25,9 @@ class Reset(Mod):
         "checking": {"staging", "zeroing"},
         "staging": {"zeroing"},
     }
+
+    REQUIRES = (Need("at least one arm", tuple(
+        (name.replace("_", " "), "", (name,)) for name in ("leader_left", "leader_right", "follower_left", "follower_right"))),)
 
     skipped: tuple[str, ...] = ()
 

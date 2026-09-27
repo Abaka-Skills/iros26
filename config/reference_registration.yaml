@@ -1,0 +1,15 @@
+# Evaluation reference for establish_coordinates (not used to compute anything): the reference-cube
+# registration of this rig by _tmp/aloha_grid_demo, sites/lab_check/calib/20260926_044534
+# (bases 930.5 mm apart, left yaw -0.47 deg, cube-fit residuals 0.7-1.7 mm). Remove it at a new site.
+source: aloha_grid_demo lab_check 20260926_044534
+T_W_base:
+  left:
+  - [0.998297, 0.018242, 0.055404, -0.09026]
+  - [-0.01879, 0.999779, 0.009386, 0.15]
+  - [-0.05522, -0.010411, 0.99842, 0.022236]
+  - [0.0, 0.0, 0.0, 1.0]
+  right:
+  - [-0.997744, -0.00954, -0.066445, 0.84026]
+  - [0.010518, -0.999841, -0.014397, 0.15]
+  - [-0.066297, -0.015063, 0.997686, 0.027637]
+  - [0.0, 0.0, 0.0, 1.0]

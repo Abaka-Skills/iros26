@@ -1,37 +1,44 @@
-/* Panel building blocks as HTML strings. They read the status shape the backend will serve
-   (Aloha.status() + cameras + log) and the panel's own UI state; they hold no state. */
-import { MODS, PLANNED, CATEGORIES, ROBOT_STATES, LOG } from './mock.js';
+/* Panel building blocks as HTML strings. They read the live status pushed by the API and the
+   catalog it serves (both kept in `ctx` by admin.js); they hold no state of their own. */
+
+export const ctx = {
+  mods: {},       // name -> catalog entry (GET /api/mods)
+  robot: null,    // GET /api/robot: major states, arm and camera specs
+  log: [],        // records from the stream, oldest first
+  coordinates: null,  // GET /api/coordinates (latest localize result)
+  topics: {},     // name -> catalog entry (GET /api/topics): doc, depends, output
+};
 
 export const ARM_ORDER = ['leader_left', 'follower_left', 'leader_right', 'follower_right'];
-export const CAM_ORDER = ['high', 'low', 'wrist_a', 'wrist_b'];
 const MODE = { position: 'position', external_effort: 'gravity comp', idle: 'braked', velocity: 'velocity', effort: 'effort' };
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+export const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export const armLabel = n => n.replace('leader_', 'Leader ').replace('follower_', 'Follower ').replace('left', 'L').replace('right', 'R');
 
-/* A missing leader is expected and shown as absent; a missing follower is an error. */
-export const armKind = a => a.connected ? 'ok' : a.role === 'leader' ? 'off' : 'err';
-export const modeText = a => a.connected ? a.mode.map(m => MODE[m] || m).join(' / ') : 'absent';
+/* A missing leader is expected and shown as absent; a missing follower, or any arm whose output
+   stopped, is an error. */
+export const armLive = a => a.connected && !a.lost && a.pos;
+export const armKind = a => armLive(a) ? 'ok' : (!a.connected || a.lost) && a.role === 'leader' ? 'off' : 'err';
+export const modeText = a => a.lost ? (a.role === 'leader' ? 'offline' : 'no output') : a.connected ? (a.mode || []).map(m => MODE[m] || m).join(' / ') : 'absent';
 
 export const dot = k => `<i class="dot ${k}"></i>`;
 const ICON = {
   run: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg>',
   stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/></svg>',
   theme: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5a7.5 7.5 0 0 1 0 15Z" fill="currentColor"/></svg>',
+  fold: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 6-6 6 6 6"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>',
+  octagon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.2 2.5h7.6l5.7 5.7v7.6l-5.7 5.7H8.2l-5.7-5.7V8.2z"/><path d="M7 12h10" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg>',
+  plug: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>',
 };
 export const icon = k => ICON[k];
 
 /* ---------------- mods ---------------- */
-export const active = S => S.mods[S.mods.length - 1] || null;
-const NOW = () => Date.now() / 1000;
+export const active = S => S?.mods?.[S.mods.length - 1] || null;
 const secs = t => t < 10 ? t.toFixed(1) + ' s' : t < 90 ? t.toFixed(0) + ' s' : (t / 60).toFixed(1) + ' min';
-
-/* every mod the browser lists: real ones from Python, then planned examples */
-export const ALL_MODS = [
-  ...Object.entries(MODS).map(([name, m]) => ({ name, category: m.category, doc: m.doc })),
-  ...PLANNED,
-];
+const categories = () => [...new Set(Object.values(ctx.mods).map(m => m.category))];
 
 /* the longest path from idle through the mod's own transitions, then done */
 function mainPath(tr) {
@@ -40,32 +47,23 @@ function mainPath(tr) {
   return [...longest('idle'), 'done'];
 }
 
-/* seconds spent in each visited state; the current one is still counting */
-function durations(m) {
+/* seconds spent in each visited state; the current one is still counting (server clock `now`) */
+function durations(m, now) {
   const d = {};
-  m.history.forEach(([s, t], i) => { d[s] = (m.history[i + 1] ? m.history[i + 1][1] : NOW()) - t; });
+  m.history.forEach(([s, t], i) => { d[s] = (m.history[i + 1] ? m.history[i + 1][1] : now) - t; });
   return d;
 }
 
-/* what each mod needs from the hardware right now */
-export function availability(name, S) {
-  const A = S.arms, has = n => A[n].connected;
-  if (name === 'reset') {
-    const n = Object.values(A).filter(a => a.connected).length;
-    return [[n ? 'ok' : 'err', `${n}/4 arms`]];
-  }
-  if (name === 'teleop') return ['left', 'right'].map(s => {
-    const ok = has('leader_' + s) && has('follower_' + s);
-    return [ok ? 'ok' : 'off', `${s} pair${ok ? '' : ': no leader'}`];
-  });
-  if (name === 'instruction') return ['left', 'right'].map(s => [has('follower_' + s) ? 'ok' : 'err', `follower ${s[0].toUpperCase()}`]);
-  return [];
+/* the server's check of a mod's REQUIRES against the connected hardware */
+const req = (S, name) => S?.requirements?.[name] ?? { met: true, needs: [] };
+function modDot(S, name) {
+  if (active(S)?.name === name) return 'live';
+  return req(S, name).met ? 'ok' : 'err';
 }
-
-function modDot(S, m) {
-  if (m.planned) return 'off';
-  if (active(S) && active(S).name === m.name) return 'live';
-  return availability(m.name, S).some(([k]) => k === 'ok') ? 'ok' : 'err';
+/* why a mod cannot run, in one line */
+export function blockedBy(S, name) {
+  const unmet = req(S, name).needs.filter(n => !n.met);
+  return unmet.map(n => `needs ${n.text} (${n.items.filter(i => !i.ok).map(i => `${i.label}: no ${i.missing.join(', ')}`).join('; ')})`).join('; ');
 }
 
 /* ---------------- mod browser ---------------- */
@@ -74,81 +72,119 @@ const matches = (m, { query, cat }) =>
   (!query || (m.name + ' ' + m.doc).toLowerCase().includes(query.toLowerCase()));
 
 export function modCats(ui) {
-  const n = c => ALL_MODS.filter(m => m.category === c).length;
-  return `<span data-cat="all" class="${ui.cat === 'all' ? 'on' : ''}">all ${ALL_MODS.length}</span>` +
-    CATEGORIES.filter(n).map(c => `<span data-cat="${c}" class="${ui.cat === c ? 'on' : ''}">${c}</span>`).join('');
+  const all = Object.keys(ctx.mods).length;
+  return `<span data-cat="all" class="${ui.cat === 'all' ? 'on' : ''}">all ${all}</span>` +
+    categories().map(c => `<span data-cat="${c}" class="${ui.cat === c ? 'on' : ''}">${c}</span>`).join('');
 }
 
 export function modList(S, ui) {
-  const hits = ALL_MODS.filter(m => matches(m, ui));
+  const hits = Object.values(ctx.mods).filter(m => matches(m, ui));
   if (!hits.length) return `<div class="empty">No mod matches “${esc(ui.query)}”.</div>`;
-  return CATEGORIES.map(c => {
+  return categories().map(c => {
     const ms = hits.filter(m => m.category === c);
     return ms.length ? `<div class="mcat">${c}<span>${ms.length}</span></div>${ms.map(m => {
-      const run = active(S) && active(S).name === m.name;
-      const tail = m.planned ? '<span class="tagp">planned</span>'
-        : `<span class="sub">${run ? active(S).state : availability(m.name, S).some(([k]) => k === 'ok') ? 'ready' : 'blocked'}</span>`;
-      return `<div class="mrow ${m.name === ui.selected ? 'on' : ''} ${m.planned ? 'planned' : ''}" data-mod="${m.name}">
-        ${dot(modDot(S, m))}<span class="mname">${m.name}</span>${tail}<span class="mdoc">${m.doc}</span></div>`;
+      const run = active(S)?.name === m.name;
+      const tail = `<span class="sub">${run ? active(S).state : modDot(S, m.name) === 'ok' ? 'ready' : 'blocked'}</span>`;
+      return `<div class="mrow ${m.name === ui.selected ? 'on' : ''}" data-mod="${m.name}" title="${m.name}">
+        ${dot(modDot(S, m.name))}<span class="mname">${m.name}</span>${tail}<span class="mdoc">${esc(m.doc)}</span></div>`;
     }).join('')}` : '';
   }).join('');
 }
 
-export function modCount() {
-  const ready = ALL_MODS.filter(m => !m.planned).length;
-  return `${ready} available · ${ALL_MODS.length - ready} planned (examples)`;
-}
-
 /* ---------------- dock: the selected mod ---------------- */
-function paramFields(S, name, locked) {
-  const run = active(S) && active(S).name === name;
-  const P = run ? active(S).params : MODS[name].params;
-  const unit = { duration_s: 's', align_time: 's', goal_time: 's', sample_hz: 'Hz' };
-  const dis = locked ? 'disabled' : '';
-  return Object.entries(P).map(([k, v]) => {
+const UNIT = { duration_s: 's', stage_time: 's', goal_time: 's', sample_hz: 'Hz' };
+
+function paramFields(S, m, running) {
+  const values = running ? active(S).params : Object.fromEntries(m.params.map(p => [p.name, p.default]));
+  const dis = running ? 'disabled' : '';
+  return m.params.map(p => {
+    const v = values[p.name];
     let input;
-    if (k === 'sides') {
+    if (p.type === 'tuple' && p.name === 'sides') {
+      const can = Object.fromEntries(req(S, m.name).needs.flatMap(n => n.items).filter(i => i.side).map(i => [i.side, i.ok]));
       input = `<span class="toggles">${['left', 'right'].map(s => {
-        const ok = name === 'teleop' ? S.arms['leader_' + s].connected && S.arms['follower_' + s].connected : S.arms['follower_' + s].connected;
-        return `<button class="${!ok ? 'x' : v.includes(s) ? 'on' : ''}" ${dis || !ok ? 'disabled' : ''} data-param="${k}" data-val="${s}">${s}</button>`;
+        const ok = can[s] ?? true;
+        return `<button class="${!ok ? 'x' : v.includes(s) ? 'on' : ''}" ${dis || !ok ? 'disabled' : ''} data-param="${p.name}" data-val="${s}">${s}</button>`;
       }).join('')}</span>`;
-    } else if (typeof v === 'boolean') {
-      input = `<span class="toggles"><button class="${v ? 'on' : ''}" ${dis} data-param="${k}">${v ? 'on' : 'off'}</button></span>`;
+    } else if (p.type === 'bool') {
+      input = `<span class="toggles"><button class="${v ? 'on' : ''}" ${dis} data-param="${p.name}" data-bool>${v ? 'on' : 'off'}</button></span>`;
     } else {
-      input = `<label class="in"><input value="${v}" inputmode="decimal" ${dis} data-param="${k}"><u>${unit[k] || ''}</u></label>`;
+      input = `<label class="in"><input value="${esc(v)}" inputmode="decimal" ${dis} data-param="${p.name}" data-type="${p.type}"><u>${UNIT[p.name] || ''}</u></label>`;
     }
-    return `<div class="field"><span>${k}</span>${input}</div>`;
+    const help = p.help ? `<span class="qhelp" tabindex="0" aria-label="What is ${p.name}?" data-help="${esc(p.help)}" data-figure="${p.figure ?? ''}">?</span>` : '';
+    return `<div class="field"><span>${p.name}${help}</span>${input}</div>`;
   }).join('');
 }
 
-export function dock(S, name) {
-  const m = ALL_MODS.find(x => x.name === name);
-  const run = active(S) && active(S).name === name;
-  const head = `<div class="phead"><div><b>${m.name}</b><span class="sub">${m.category}</span></div><p>${m.doc}</p>
-    ${m.planned ? '' : `<div class="need">${availability(name, S).map(([k, t]) => `<span>${dot(k)}${t}</span>`).join('')}</div>`}</div>`;
-  if (m.planned) return `${head}<div class="planned-note">Planned: not implemented yet. Listed to show how the browser scales.</div>`;
-  const skip = name === 'teleop' && !S.arms.leader_right.connected
-    ? '<div class="hint">● leader R absent: the right side will be skipped</div>' : '';
-  const fsm = run ? active(S) : { name, state: null, history: [], ...MODS[name] };
-  return `${head}
-    <div class="params">${paramFields(S, name, run)}${skip}</div>
-    <div><h4>State machine <span class="sub">${run ? 'running' : 'not running'}</span></h4>${fsmTimeline(fsm)}</div>`;
+/* read the dock's inputs back into a params object for POST /api/mods/{name}/run */
+export function readParams(root, m) {
+  const out = {};
+  for (const p of m.params) {
+    if (p.type === 'tuple') {
+      out[p.name] = [...root.querySelectorAll(`button[data-param="${p.name}"].on`)].map(b => b.dataset.val);
+    } else if (p.type === 'bool') {
+      out[p.name] = root.querySelector(`[data-param="${p.name}"]`).classList.contains('on');
+    } else {
+      out[p.name] = Number(root.querySelector(`[data-param="${p.name}"]`).value);
+    }
+  }
+  return out;
 }
 
-export function actions(S, name) {
-  const m = ALL_MODS.find(x => x.name === name);
-  const busy = !!active(S);
-  return `<div class="actions">
-    <button class="btn run big" ${busy || m.planned ? 'disabled' : ''} title="${busy ? 'a mod is running' : ''}">${icon('run')}Run ${m.planned ? '' : name}</button>
-    <button class="btn stop big" ${busy ? '' : 'disabled'}>${icon('stop')}Stop</button></div>`;
+export function dock(S, name, now) {
+  const m = ctx.mods[name];
+  if (!m) return '<div class="now">Waiting for the robot API…</div>';
+  const running = active(S)?.name === name;
+  const r = req(S, name);
+  /* an option that is down while its Need is still met is only skipped; otherwise it blocks */
+  const skipped = r.needs.filter(n => n.met).flatMap(n => n.items.filter(i => !i.ok).map(i => i.label));
+  const fsm = running ? active(S) : { ...m, state: null, history: [] };
+  const needs = r.needs.map(n => `<div class="need"><span class="ntext">${dot(n.met ? 'ok' : 'err')}needs ${esc(n.text)}</span>
+      ${n.items.map(i => `<span>${dot(i.ok ? 'ok' : n.met ? 'off' : 'err')}${esc(i.label)}</span>`).join('')}</div>`).join('');
+  return `<div class="phead"><div><b>${m.name}</b><span class="sub">${m.category}</span></div><p>${esc(m.doc)}</p>${needs}</div>
+    <div class="params">${paramFields(S, m, running)}${skipped.length && !running ? `<div class="hint">● ${skipped.join('; ')}: skipped</div>` : ''}</div>
+    ${name === 'localize' ? coordinatesCard() : ''}
+    <div><h4>State machine <span class="sub">${running ? 'running' : 'not running'}</span></h4>${fsmTimeline(fsm, now)}</div>`;
+}
+
+/* the latest registration, with the numbers that say how far to trust it */
+function coordinatesCard() {
+  const c = ctx.coordinates;
+  if (!c) return '<div class="result"><h4>Latest result</h4><div class="sub">none yet</div></div>';
+  const r = c.report, g = r.geometry;
+  const row = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
+  return `<div class="result"><h4>Latest result <span class="sub">${esc(c.created)}</span></h4>
+    ${row('bases apart', `${g.base_distance_mm} mm`)}
+    ${row('left yaw / lateral', `${g.left_yaw_vs_facing_deg}° / ${g.left_lateral_in_right_mm} mm`)}
+    ${row('base heights L / R', `${g.base_height_mm.left} / ${g.base_height_mm.right} mm`)}
+    ${row('constraint', r.constraint?.startsWith('parallel') ? 'parallel rails' : 'free fit')}
+    ${r.parallel_fit ? row('parallel fit rms', `${r.parallel_fit.rms_mm} mm`) : ''}
+    ${r.free_fit_left_yaw_vs_facing_deg !== undefined ? row('free-fit yaw', `${r.free_fit_left_yaw_vs_facing_deg}°`) : ''}
+    ${g.apparent_tilt_deg ? row('apparent tilt L / R (sag)', `${g.apparent_tilt_deg.left} / ${g.apparent_tilt_deg.right}°`) : ''}
+    ${row('fit rms (inliers)', `${r.fit_residual_mm.rms} mm (${r.inliers}/${r.cross_matches})`)}
+    ${r.split_half ? row('split-half', `${r.split_half.translation_mm} mm / ${r.split_half.rotation_deg}°`) : ''}
+    ${row('view consistency L / R', `${r.view_consistency.left.median_mm} / ${r.view_consistency.right.median_mm} mm`)}
+    ${row('table agreement', `${r.table_agreement.normal_angle_deg}° / ${r.table_agreement.height_gap_at_origin_mm} mm`)}
+    ${r.vs_reference ? row('vs cube registration', `${r.vs_reference.base_distance_mm} mm / ${r.vs_reference.left_yaw_deg}° / ${r.vs_reference.left_lateral_mm} mm`) : ''}
+    <a class="sub" href="/api/coordinates/matches.jpg" target="_blank">SIFT matches ↗</a></div>`;
+}
+
+export function actions(S, name, error) {
+  const why = !S ? 'robot API offline' : S.state === 'estop' ? 'emergency stop is active'
+    : active(S) ? 'a mod is running' : blockedBy(S, name);
+  return `${error ? `<div class="hint err">${esc(error)}</div>` : !why || !S || active(S) || S.state === 'estop' ? '' : `<div class="hint err">${esc(why)}</div>`}<div class="actions">
+    <button class="btn run big" id="run" ${why ? 'disabled' : ''} title="${esc(why || `Run ${name}`)}">${icon('run')}Run</button>
+    <button class="btn stop big" id="stop" ${active(S) ? '' : 'disabled'} title="Stop the mod gracefully (its arms hold)">${icon('stop')}Stop</button></div>`;
 }
 
 /* ================= FSM: two levels ================= */
 /* Level 1: the robot's major states, then the running mod (and its parents) and its state. */
-export function majorStrip(S) {
+export function majorStrip(S, link) {
+  if (!link) return '<div class="major"><span class="mst down">backend offline</span><span class="sub">reconnecting…</span></div>';
   const m = active(S);
   const crumbs = S.mods.map(x => `<span class="crumb">${x.name}</span>`).join('<span class="sep">›</span>');
-  return `<div class="major">${['offline', 'idle', 'running'].map(s => `<span class="mst ${s === S.state ? 'cur' : ''}" title="${ROBOT_STATES[s]}">${s}</span>`).join('<i class="marr"></i>')}
+  const states = ctx.robot?.states ?? {};
+  return `<div class="major">${Object.keys(states).map(s => `<span class="mst ${s === S.state ? 'cur' : ''}" title="${esc(states[s])}">${s}</span>`).join('<i class="marr"></i>')}
     ${m ? `<span class="sep">›</span>${crumbs}<span class="sep">›</span><span class="crumb cur">${m.state}</span>` : ''}</div>`;
 }
 
@@ -158,41 +194,79 @@ function stateClass(s, m) {
 }
 
 /* Level 2: each state of the mod's own machine, time spent in it, and what the arms do there. */
-function fsmTimeline(m) {
-  const path = mainPath(m.transitions), d = durations(m);
+function fsmTimeline(m, now) {
+  const path = mainPath(m.transitions), d = durations(m, now);
+  const terminal = ['stopped', 'failed'].includes(m.state) ? m.state : null;
   return `<div class="vsteps">${path.map(s => {
     const c = stateClass(s, m);
-    return `<div class="vstep ${c}"><i class="n"></i><div><div class="vrow"><b>${s}</b>${d[s] !== undefined && s !== 'idle' ? `<span class="vt">${secs(d[s])}${c === 'cur' ? ' ●' : ''}</span>` : ''}</div><p>${m.states[s]}</p></div></div>`;
+    return `<div class="vstep ${c}"><i class="n"></i><div><div class="vrow"><b>${s}</b>${d[s] !== undefined && s !== 'idle' ? `<span class="vt">${secs(d[s])}${c === 'cur' ? ' ●' : ''}</span>` : ''}</div><p>${esc(m.states[s])}</p></div></div>`;
   }).join('')}</div>
-    <div class="term">from any state → stopped · <span class="f">failed</span></div>`;
+    <div class="term">from any state → <span class="${terminal === 'stopped' ? 'hit' : ''}">stopped</span> · <span class="f">failed</span></div>`;
 }
 
 /* the running mod in one line, with progress for a timed state */
-export function now(S) {
+export function now(S, t) {
   const m = active(S);
   if (!m) return '<div class="now">No mod running</div>';
-  const t = NOW() - m.since, dur = m.params.duration_s;
-  return `<div class="now"><b>${m.name} · ${m.state}</b> — ${m.states[m.state]}</div>
-    ${m.state === 'following' && dur ? `<div class="prow"><div class="progress"><i style="width:${Math.min(100, (t / dur) * 100)}%"></i></div><span class="sub">${t.toFixed(1)} / ${dur} s</span></div>` : ''}`;
+  const el = t - m.since, dur = m.params.duration_s;
+  return `<div class="now"><b>${m.name} · ${m.state}</b> — ${esc(m.states[m.state])}</div>
+    ${m.state === 'following' && dur ? `<div class="prow"><div class="progress"><i style="width:${Math.min(100, (el / dur) * 100)}%"></i></div><span class="sub">${el.toFixed(1)} / ${dur} s</span></div>` : ''}`;
 }
 
 /* ---------------- cameras: click a tile to switch RGB / depth ---------------- */
-export function camTile(S, key, snapDir, mode = 'color') {
-  const c = S.cameras[key];
-  return `<figure class="cam" data-cam="${key}" title="Click for ${mode === 'color' ? 'depth' : 'RGB'}">
-    <img src="${snapDir}${c.serial}_${mode}.png" alt="${c.label} ${mode === 'color' ? 'RGB' : 'depth'}" onerror="this.parentNode.classList.add('nofeed')">
-    <figcaption>${dot(c.ok ? 'ok' : 'err')}${c.label}<span class="s">${c.fps.toFixed(0)} fps</span></figcaption>
-    <span class="cmode">${mode === 'color' ? 'RGB' : 'Depth'}</span>
+export function camTile(key, c, kind) {
+  return `<figure class="cam ${c.ok ? '' : 'nofeed'}" data-cam="${key}" title="${c.ok ? `Click for ${kind === 'color' ? 'depth' : 'RGB'}` : esc(c.error || 'no frames')}">
+    ${c.ok ? `<img data-feed="${key}" alt="${c.label} ${kind === 'color' ? 'RGB' : 'depth'}">` : `<span class="why">${esc(c.error || 'no frames')}</span>`}
+    <figcaption>${dot(c.ok ? 'ok' : 'err')}${c.label}<span class="s" data-fps>${c.ok ? c.fps.toFixed(0) + ' fps' : 'offline'}</span></figcaption>
+    ${c.ok ? `<span class="cmode">${kind === 'color' ? 'RGB' : 'Depth'}</span>` : ''}
   </figure>`;
 }
 
 /* ---------------- log (always on screen) ---------------- */
-export function logPanel(S, filter = 'all') {
+export const logHead = (S, filter) => {
+  const n = k => ctx.log.filter(l => l.level === k).length;
   const m = active(S);
-  const n = k => LOG.filter(l => l.level === k).length;
-  const keep = l => filter === 'all' || l.level === filter || l.src === filter;
-  const ts = t => new Date(t * 1000).toTimeString().slice(0, 8);
   const chip = (f, label) => `<span class="lf ${filter === f ? 'on' : ''}" data-logf="${f}">${label}</span>`;
-  return `<div class="loghead"><b>Log</b>${chip('all', `all ${LOG.length}`)}${chip('warn', `warn ${n('warn')}`)}${chip('error', `error ${n('error')}`)}${m ? chip(m.name, m.name) : ''}<span class="lfollow">${dot('live')}follow</span></div>
-    <div class="loglines">${LOG.filter(keep).map(l => `<div class="ll ${l.level}"><span class="lt">${ts(l.t)}</span><span class="lv">${l.level}</span><span class="ls">${l.src}</span><span class="lm">${esc(l.msg)}</span></div>`).join('')}</div>`;
+  return `<b>Log</b>${chip('all', `all ${ctx.log.length}`)}${chip('warning', `warn ${n('warning')}`)}${chip('error', `error ${n('error') + n('critical')}`)}${m ? chip(m.name, m.name) : ''}<span class="lfollow">${dot('live')}follow</span>`;
+};
+export const logKeep = filter => l => filter === 'all' || l.level === filter || l.src === filter
+  || (filter === 'error' && l.level === 'critical');
+export const logLine = l => `<div class="ll ${l.level}"><span class="lt">${new Date(l.t * 1000).toTimeString().slice(0, 8)}</span><span class="lv">${{ warning: 'warn', critical: 'crit' }[l.level] ?? l.level}</span><span class="ls">${esc(l.src)}</span><span class="lm">${esc(l.msg)}</span></div>`;
+
+/* ---------------- topics: perception processes the backend runs ---------------- */
+export const hzText = hz => `${hz.toFixed(hz < 10 ? 1 : 0)} Hz`;
+const TOPIC_DOT = { running: 'ok', waiting: 'warn', starting: 'live', crashed: 'err', stopped: 'off' };
+export const topicLive = t => t && ['running', 'waiting'].includes(t.state);
+
+/* one row per topic: state, eye (show its results in the 3-D view), start/stop, restart; the
+   open row adds what it computes, why it waits or crashed, and how the panel subscribes */
+export function topicList(S, ui) {
+  const st = S?.topics ?? {};
+  return Object.values(ctx.topics).map(c => {
+    const t = st[c.name] ?? { state: 'stopped' }, live = topicLive(t), u = ui.topics[c.name];
+    const busy = t.state === 'starting';
+    const unmet = t.requirements && !t.requirements.met
+      ? t.requirements.needs.filter(n => !n.met).map(n => n.text).join('; ') : '';
+    const sub = t.state === 'running' ? hzText(t.hz) : t.state === 'waiting' ? 'waiting' : t.state;
+    const eye = `<button class="tb ${u.eye && live ? 'on' : ''}" data-teye="${c.name}" ${live ? '' : 'disabled'} title="${live ? (u.eye ? 'Hide' : 'Show') + ' in the 3-D view' : 'Start the topic to show it'}">${ICON.eye}</button>`;
+    const go = live || busy
+      ? `<button class="tb" data-tact="stop" data-topic-name="${c.name}" title="Stop ${c.name}">${ICON.stop}</button>`
+      : `<button class="tb" data-tact="start" data-topic-name="${c.name}" ${unmet ? 'disabled' : ''} title="${esc(unmet ? 'Needs ' + unmet : 'Start ' + c.name)}">${ICON.run}</button>`;
+    const again = `<button class="tb" data-tact="restart" data-topic-name="${c.name}" ${live ? '' : 'disabled'} title="Restart ${c.name}">${ICON.restart}</button>`;
+    const open = ui.topicOpen === c.name;
+    return `<div class="trow ${open ? 'open' : ''}">
+      <div class="thead" data-topic="${c.name}">${dot(TOPIC_DOT[t.state] ?? 'off')}<span class="tname">${c.name}</span><span class="sub" data-thz>${esc(sub)}</span>${eye}${go}${again}</div>
+      ${open ? topicDetail(c, t, u) : ''}</div>`;
+  }).join('');
+}
+
+function topicDetail(c, t, u) {
+  const why = t.state === 'waiting' ? `<div class="hint">${esc(t.waiting)}</div>`
+    : t.state === 'crashed' ? `<div class="hint err">exit ${t.code}: ${esc((t.tail ?? []).slice(-2).join(' | '))}</div>` : '';
+  const needs = c.depends.length ? `<div class="sub">needs ${c.depends.join(', ')}</div>` : '';
+  const mode = m => `<button class="${u.mode === m ? 'on' : ''}" data-tmode="${m}" data-topic-name="${c.name}">${m}</button>`;
+  return `<div class="tbody"><p>${esc(c.doc)}</p>${needs}${why}
+    <div class="field"><span>subscribe</span><span class="toggles">${mode('stream')}${mode('poll')}</span></div>
+    ${u.mode === 'poll' ? `<div class="field"><span>every</span><label class="in"><input value="${u.period}" inputmode="numeric" data-tperiod="${c.name}"><u>ms</u></label></div>` : ''}
+    ${t.url ? `<a class="sub" href="${t.url}/latest" target="_blank">${t.url.replace('http://', '')}/latest ↗</a>` : ''}</div>`;
 }

@@ -1,0 +1,12 @@
+# Copied 2026-09-26 from _tmp/aloha_grid_demo/config/handeye (same rig: wrist cameras
+# 218622271803 left / 218622272313 right). Valid while the camera mounts are undisturbed.
+# T_ee_cam: ee_gripper_link -> camera optical frame. Initial value copied from Heron
+# configs/rig5090.yaml (hand-eye measured 2026-07-30 right / 2026-08-18 left).
+arm: left
+source: heron_rig5090
+measured: '2026-08-18'
+T_ee_cam:
+- [-0.0069, -0.3361, 0.9418, -0.1054]
+- [-1.0, -0.0027, -0.0083, 0.0087]
+- [0.0053, -0.9418, -0.3361, 0.0537]
+- [0.0, 0.0, 0.0, 1.0]

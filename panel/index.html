@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>myaloha panel</title>
-<link rel="stylesheet" href="assets/css/ui.css">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/admin.css">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
@@ -17,26 +18,53 @@
 
 <div class="panel chip" id="brand"></div>
 <div class="panel chip" id="corner">
+  <button class="btn" id="reconnect" hidden></button>
+  <a class="btn" href="/docs" target="_blank" title="Every endpoint the panel uses, interactive">API</a>
   <button class="btn icon" id="theme" title="Light / dark"></button>
-  <button class="btn stop" id="estop"></button>
+</div>
+
+<!-- Emergency stop: always on top, triggers on press (not release), also on Space. -->
+<button id="estop" title="Emergency stop: brake every arm now (Space)"></button>
+<div id="estop-banner" hidden>
+  <b>EMERGENCY STOP</b><span>Arms braked. Commands are refused until reset.</span>
+  <button class="btn" id="estop-reset">Reset</button>
 </div>
 
 <div class="panel" id="browser">
+  <button class="btn icon" id="fold" title="Collapse the mods panel"></button>
   <label class="search"><span id="search-icon"></span><input id="q" type="search" placeholder="Search mods" autocomplete="off"><kbd>⌘K</kbd></label>
   <div class="cats" id="cats"></div>
   <div class="mlist" id="mlist"></div>
   <div class="mfoot sub" id="mfoot"></div>
+  <div class="tsec"><h4>Topics <span class="sub" id="tcount"></span></h4><div id="topics"></div></div>
 </div>
+
+<!-- asks before starting a topic's stopped dependencies, or stopping its dependents -->
+<div id="confirm" hidden><div class="panel"><p id="confirm-text"></p><div class="actions">
+  <button class="btn" id="confirm-no">Cancel</button><button class="btn run" id="confirm-yes"></button></div></div></div>
 
 <div id="cams"></div>
 
-<div class="panel" id="dock">
-  <div id="dock-body"></div>
-  <div id="dock-foot"></div>
+<!-- 3-D view: 90 deg turns, presets, and a free mode (drag / scroll / right-drag on the rig) -->
+<div class="panel chip" id="views">
+  <button class="btn icon" data-view="left" title="Turn the view left 90° (Q)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
+  <button class="btn icon" data-view="right" title="Turn the view right 90° (E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></button>
+  <button class="btn icon" data-view="home" title="Default view (H)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6 20.4 7.3v9.4L12 21.4 3.6 16.7V7.3Z"/><path d="M12 12 20.4 7.3M12 12 3.6 7.3M12 12v9.4"/></svg></button>
+  <button class="btn icon" data-view="top" title="Top view (R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M12 8.6v6.8M8.6 12h6.8"/></svg></button>
+  <button class="btn icon" data-view="front" title="Front view (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="9.5" rx="1.6"/><path d="M2.5 20h19"/></svg></button>
+  <span class="vsep"></span>
+  <button class="btn" data-view="drape" title="Project the top camera's pixels onto the table plane (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 13l12 4-6 4z"/><path d="M12 3v7"/><path d="m9 7 3 3 3-3"/></svg>Table</button>
+  <button class="btn" data-view="free" title="Free camera: drag to orbit, scroll to zoom, right-drag to pan, double-click to reset (V)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>Free</button>
 </div>
 
-<div class="panel" id="log"></div>
+<div class="panel" id="dock">
+  <div id="dock-body"></div>
+  <div id="dock-foot"><div id="nowline"></div><div id="acts"></div></div>
+</div>
 
-<script type="module" src="assets/js/main.js"></script>
+<div id="qpop" hidden></div>
+<div class="panel" id="log"><div class="loghead" id="loghead"></div><div class="loglines" id="loglines"></div></div>
+
+<script type="module" src="assets/js/admin.js"></script>
 </body>
 </html>

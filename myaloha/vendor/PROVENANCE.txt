@@ -1,0 +1,6 @@
+Verbatim copies (not modified), taken 2026-09-26 from the aloha_grid_demo reference repo
+(grid_demo/vendor/), which copied them from the Heron repo:
+  heron_kinematics.py  <-  Heron heron/robot/kinematics.py  (sha256 e6db5b85d0f2e145, per the demo's PROVENANCE)
+  wxai_follower.urdf   <-  Heron assets/wxai_follower.urdf  (sha256 1a0fe5fa65aa5d86), itself from
+                           TrossenRobotics/trossen_arm_description
+heron_kinematics.DEFAULT_URDF points into Heron's tree; myaloha always passes wxai_follower.urdf here.

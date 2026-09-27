@@ -1,7 +1,7 @@
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from myaloha.mods.base import Mod
+from myaloha.mods.base import Mod, Need
 
 
 class Instruction(Mod):
@@ -16,21 +16,26 @@ class Instruction(Mod):
 
     @dataclass
     class Params:
-        duration_s: float = 0.0  # 0 runs until stopped
-        sample_hz: float = 30.0
-        sides: tuple[str, ...] = ("left", "right")
+        duration_s: float = field(default=0.0, metadata={"help": "Seconds of free motion; 0 runs until stopped."})
+        stage_time: float = field(default=2.0, metadata={"help": "Seconds to reach the staged pose before floating."})
+        sample_hz: float = field(default=30.0, metadata={"help": "How often the followers' joints are sampled."})
+        sides: tuple[str, ...] = field(default=("left", "right"), metadata={"help": "Followers to free: left, right or both."})
 
     STATES = {
         "idle": "not started",
-        "entering": "selected followers switch to gravity comp (external effort 0)",
+        "staging": "selected followers move to the staged pose, clear of the joint limits (position)",
         "free": "followers float and are moved by hand; joint state sampled",
         "exiting": "followers hold their current pose (position)",
     }
     TRANSITIONS = {
-        "idle": {"entering"},
-        "entering": {"free", "exiting"},
+        "idle": {"staging"},
+        "staging": {"free", "exiting"},
         "free": {"exiting"},
     }
+
+    REQUIRES = (Need("a follower on a requested side", (
+        ("follower L", "left", ("follower_left",)),
+        ("follower R", "right", ("follower_right",)))),)
 
     readings: dict[str, dict] = {}
     ranges: dict[str, list[tuple[float, float]]] = {}
@@ -41,9 +46,13 @@ class Instruction(Mod):
             raise RuntimeError(f"no follower connected on {', '.join(self.params.sides)}")
         self.readings, self.ranges = {}, {}
 
-        self.goto("entering")
+        self.goto("staging")
         try:
             for arm in arms:
+                arm.move_to(arm.staged_positions, self.params.stage_time)
+            if not self.sleep(self.params.stage_time):
+                return
+            for arm in arms:  # gravity comp (external effort 0)
                 arm.free()
             self.goto("free")
             period = 1 / self.params.sample_hz

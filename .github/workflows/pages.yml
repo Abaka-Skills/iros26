@@ -23,8 +23,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Stage the visitor page as the site root
+        run: |
+          mkdir _site
+          cp -R panel/assets panel/visitor.json panel/styleboard.html _site/
+          cp panel/visitor.html _site/index.html
+          touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: visitor_panel     # the public page is the cube sandbox in visitor_panel/
+          path: _site             # the public page is the cube sandbox (panel/visitor.html)
       - id: deployment
         uses: actions/deploy-pages@v4

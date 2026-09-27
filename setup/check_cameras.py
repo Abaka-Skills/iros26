@@ -12,7 +12,8 @@ import cv2
 import numpy as np
 import pyrealsense2 as rs
 
-from realsense_macos import capture_realsense
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
+from myaloha.realsense_macos import capture_realsense
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "camera_snapshots")
 os.makedirs(OUT, exist_ok=True)

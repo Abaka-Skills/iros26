@@ -4,12 +4,19 @@ version = "0.1.0"
 description = "Bimanual Trossen WidowX AI setup driven through LeRobot"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+  "fastapi>=0.141.1",
+  "httpx>=0.28.1",
   "lerobot_robot_trossen",
   "lerobot_teleoperator_trossen",
+  "mcp>=2.2",
+  "uvicorn[standard]>=0.54.0",
+  "websockets>=17.1",
 ]
 
 [dependency-groups]
-dev = ["pytest"]
+dev = [
+    "pytest",
+]
 
 [tool.uv]
 # Our arm controllers run firmware v1.9.0; the driver's major.minor must match.

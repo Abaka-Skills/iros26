@@ -1,60 +1,63 @@
-"""Run a mod from the terminal.
+"""Command line.
 
-From ALOHA/ (after setup/find_arms.sh):
-    uv run python -m myaloha status
+From the repo root (after setup/find_arms.sh):
+    uv run python -m myaloha panel                     # check hardware, serve API + panel, open it
+    uv run python -m myaloha panel --sim               # same, without hardware
+    uv run python -m myaloha status                    # connect and print; moves nothing
     uv run python -m myaloha run reset goal_time=4
     uv run python -m myaloha run teleop duration_s=60 sides=left
-    uv run python -m myaloha run instruction      # Ctrl-C ends it
+    uv run python -m myaloha run instruction           # Ctrl-C ends it
 
-`status` connects and prints without moving anything. Ctrl-C during `run` stops the mod cleanly.
+Ctrl-C during `run` stops the mod cleanly.
 """
 import argparse
-import dataclasses
 import json
 import logging
-import threading
 
 from myaloha.mods import MODS
-from myaloha.robot import Aloha
-
-
-def parse_params(mod_cls, pairs: list[str]):
-    fields = {f.name: f for f in dataclasses.fields(mod_cls.Params)}
-    defaults = mod_cls.Params()
-    values = {}
-    for pair in pairs:
-        key, _, raw = pair.partition("=")
-        if key not in fields:
-            raise SystemExit(f"{mod_cls.name} has no param {key!r}; params: {', '.join(fields)}")
-        default = getattr(defaults, key)
-        if isinstance(default, bool):
-            values[key] = raw.lower() in ("1", "true", "yes", "on")
-        elif isinstance(default, tuple):
-            values[key] = tuple(raw.split(","))
-        else:
-            values[key] = type(default)(raw)
-    return mod_cls.Params(**values)
 
 
 def main() -> None:
     p = argparse.ArgumentParser(prog="python -m myaloha")
     sub = p.add_subparsers(dest="cmd", required=True)
+    panel = sub.add_parser("panel", help="check the hardware, then serve the API and panel on localhost")
+    panel.add_argument("--port", type=int, default=8765)
+    panel.add_argument("--hz", type=float, default=100, help="arm monitor rate")
+    panel.add_argument("--timeout", type=float, default=3.0, help="per-arm connect timeout, s")
+    panel.add_argument("--no-cameras", action="store_true", help="skip the cameras (and sudo)")
+    panel.add_argument("--no-browser", action="store_true")
+    panel.add_argument("--sim", action="store_true", help="simulated arms and cameras")
+    panel.add_argument("--absent", default="", help="with --sim: arms/cameras to leave unplugged, comma-separated")
     sub.add_parser("status")
     run = sub.add_parser("run")
     run.add_argument("mod", choices=MODS)
     run.add_argument("params", nargs="*", help="key=value")
     args = p.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 
+    if args.cmd == "panel":
+        from myaloha import launch
+        launch.main(args)
+        return
+
+    from myaloha.robot import Aloha
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S")
     robot = Aloha()
     robot.connect()
     try:
         if args.cmd == "status":
             print(json.dumps(robot.status()["arms"], indent=2))
             return
-        mod = MODS[args.mod](robot, parse_params(MODS[args.mod], args.params))
-        worker = threading.Thread(target=mod.run)
-        worker.start()
+        cls = MODS[args.mod]
+        try:
+            params = cls.params_from(dict(pair.partition("=")[::2] for pair in args.params))
+        except (ValueError, TypeError) as e:
+            raise SystemExit(str(e))
+        mod = cls(robot, params)
+        try:
+            worker = mod.start()
+        except RuntimeError as e:  # requirement not met, busy, or emergency stop
+            raise SystemExit(str(e))
         try:
             while worker.is_alive():
                 worker.join(0.2)

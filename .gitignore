@@ -4,8 +4,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Hardware output (lab images; regenerate with setup/check_cameras.py)
+# Hardware output (lab images; regenerate with setup/check_cameras.py) and raw calibration frames
 setup/camera_snapshots/
+logs/
+
+# Site calibration results (this lab's layout; regenerate with the localize mod)
+calib/
 
 # Local notes and scratch (kept out of the public repo, as before the merge)
 CLAUDE.md

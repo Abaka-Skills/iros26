@@ -1,0 +1,35 @@
+/* Soft Clay (the IROS26 look): tokens, page and frosted panels, shared by the operator panel
+   (admin.css) and the visitor page (visitor.css). */
+:root{
+  --bar-h:52px;
+  --ok:#6f9c5c; --warn:#d9a441; --err:#c4513f; --accent:#da7a3c; --off:#a79c8f; --stop:#b23b2e;
+  --page:#efe9e2; --ink:#2b2621; --muted:#7c7267; --faint:#b3a899;
+  --panel:rgba(255,255,255,.62); --panel-solid:#f7f3ee; --panel-b:rgba(0,0,0,.08);
+  --hi:rgba(0,0,0,.05); --hi2:rgba(0,0,0,.09); --shadow:0 10px 28px -16px rgba(60,45,30,.55);
+  --vignette:.14; --grain:.20; --warn-text:#a8741a;
+}
+:root[data-theme="dark"]{
+  --page:#1a1714; --ink:#efe4d6; --muted:#a29584; --faint:#6b6156; --off:#6f665c;
+  --panel:rgba(58,52,46,.58); --panel-solid:#25211d; --panel-b:rgba(255,255,255,.10);
+  --hi:rgba(255,255,255,.07); --hi2:rgba(255,255,255,.12); --shadow:0 10px 30px -14px rgba(0,0,0,.85);
+  --vignette:.42; --grain:.16; --warn-text:var(--warn);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--page)}
+body{
+  font:13px/1.45 "Inter","Helvetica Neue","PingFang SC",system-ui,sans-serif;
+  color:var(--ink); -webkit-font-smoothing:antialiased;
+  transition:background .5s ease,color .5s ease;
+}
+
+/* frosted panel */
+.panel{
+  position:fixed;z-index:3;
+  background:var(--panel);
+  border:1px solid var(--panel-b);
+  border-radius:16px;
+  box-shadow:var(--shadow);
+  backdrop-filter:blur(22px) saturate(1.25);
+  -webkit-backdrop-filter:blur(22px) saturate(1.25);
+  transition:background .5s ease,border-color .5s ease;
+}

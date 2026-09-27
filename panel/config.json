@@ -4,20 +4,23 @@
   "unitsPerMeter": 10,
   "snapshots": "../setup/camera_snapshots/",
   "rig": {
-    "note": "Metres and degrees. Follower spacing is from the IROS26 tape measurement; leader stand placement is a guess.",
+    "note": "Metres and degrees. Follower spacing is from the IROS26 tape measurement; the leaders mirror the followers on a stand in front (stand depth and distance are guesses).",
     "table": { "w": 1.22, "d": 0.76, "thickness": 0.05, "z": 0 },
-    "stand": { "w": 1.0, "d": 0.3, "thickness": 0.05, "z": 0.62 },
+    "stand": { "w": 1.22, "d": 0.3, "thickness": 0.05, "z": 0.62 },
     "arms": {
       "follower_left":  { "x": -0.4563, "z": 0.0,  "yaw": 0 },
       "follower_right": { "x":  0.4563, "z": 0.0,  "yaw": 180 },
-      "leader_left":    { "x": -0.30,   "z": 0.62, "yaw": -90 },
-      "leader_right":   { "x":  0.30,   "z": 0.62, "yaw": -90 }
+      "leader_left":    { "x": -0.4563, "z": 0.62, "yaw": 0 },
+      "leader_right":   { "x":  0.4563, "z": 0.62, "yaw": 180 }
     },
-    "hideOnLeader": ["camera_mount_d405", "camera_link"],
     "lift": 0.02
   },
-  "camera": { "azimuth": 28, "elevation": 32, "padding": 1.06 },
-  "robots": { "dir": "./assets/meshes/wxai/", "spec": "wxai_follower.json" },
+  "camera": { "azimuth": 28, "elevation": 32, "topElevation": 70, "frontElevation": 4, "springStiffness": 70, "padding": 1.06 },
+  "robots": {
+    "dir": "./assets/meshes/wxai/",
+    "note": "Official TrossenRobotics/trossen_arm_description models: the follower has the gripper and wrist D405, each leader its own handle.",
+    "specs": { "follower": "wxai_follower.json", "leader_left": "wxai_leader_left.json", "leader_right": "wxai_leader_right.json" }
+  },
   "themes": {
     "light": {
       "bg": "#efe9e2", "board": "#d5c8b7", "stand": "#cbbca8",
@@ -32,5 +35,11 @@
       "hemiIntensity": 0.55, "fill": 0.16, "env": 0.22, "shadow": 0.5, "shadowColor": "#000000"
     }
   },
-  "material": { "bevel": 0.12, "roughness": 0.97, "sheen": 0.5 }
+  "material": { "bevel": 0.12, "roughness": 0.97, "sheen": 0.5 },
+  "cubes": {
+    "note": "locate_cubes: 2.5 cm cubes, in the Cube Sandbox's colours (visitor.json); hidden = under a stack, colour unknown",
+    "size": 0.025,
+    "colors": { "red": "#cc5241", "orange": "#da8441", "yellow": "#e0bd54", "green": "#79a665", "blue": "#4e87b0", "purple": "#896dad" },
+    "hidden": "#b8aea3"
+  }
 }
