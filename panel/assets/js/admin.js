@@ -32,6 +32,7 @@ $('theme').innerHTML = W.icon('theme');
 $('reconnect').innerHTML = `${W.icon('plug')}<span>Reconnect</span>`;
 $('search-icon').outerHTML = W.icon('search');
 $('fold').innerHTML = W.icon('fold');
+$('bounds').innerHTML = W.icon('fence');
 
 /* mods panel: folded below 1280 px unless the viewer chose otherwise (remembered) */
 let foldChoice = null;
@@ -58,11 +59,12 @@ function renderBrand() {
   const absent = S ? [...Object.values(S.arms).filter(a => !a.connected || a.lost).map(a => a.name),
     ...Object.entries(S.cameras ?? {}).filter(([, c]) => !c.ok).map(([k]) => `${k} camera`)] : [];
   $('reconnect').hidden = !absent.length;
+  $('pickandplay').hidden = !S?.mods?.some(x => x.name === 'iros26');
   $('reconnect').title = absent.length ? `Try to connect ${absent.join(', ')} (no motion; cameras also retry on their own)` : '';
   const estopped = S?.state === 'estop';
   $('estop').classList.toggle('on', estopped);
   $('estop-banner').hidden = !estopped;
-  renderDrapeButton();
+  renderAnnos();
 }
 
 /* the table projection needs a finished localize run that registered the top camera: grey until
@@ -73,12 +75,80 @@ function drapeBlocked() {
   if (!ctx.coordinates.cameras?.high) return 'The top camera was not registered in the last localize run; run it again';
   return '';
 }
-function renderDrapeButton() {
-  const btn = document.querySelector('[data-view="drape"]');
+/* the Annos checklist: what is drawn on the table; remembered in this browser */
+const annos = { table: false, grid: false, reach: false };
+try { Object.assign(annos, JSON.parse(localStorage.getItem('myaloha-annos') || '{}')); } catch {}
+function renderAnnos() {
   const why = drapeBlocked();
-  btn.disabled = !!why;
-  btn.title = why || "Project the top camera's pixels onto the table plane (T)";
-  if (why && drapeOn) { drapeOn = false; scene.setDrape(null); btn.setAttribute('aria-pressed', 'false'); }
+  const table = document.querySelector('[data-anno="table"]');
+  table.disabled = !!why;
+  table.closest('label').classList.toggle('off', !!why);
+  table.closest('label').title = why || "Project the top camera's pixels onto the table plane (T)";
+  if (annos.table && !why && !drapeOn) startDrape();
+  if ((why || !annos.table) && drapeOn) { drapeOn = false; scene.setDrape(null); }
+  for (const k of Object.keys(annos)) document.querySelector(`[data-anno="${k}"]`).checked = annos[k] && !(k === 'table' && why);
+  document.querySelector('[data-view="annos"]').setAttribute('aria-pressed', String(Object.values(annos).some(Boolean)));
+}
+function setAnno(k, on) {
+  annos[k] = on;
+  try { localStorage.setItem('myaloha-annos', JSON.stringify(annos)); } catch {}
+  if (k === 'grid') scene.setGrid(on ? 0.03 : 0);
+  if (k === 'reach') { syncReach(); syncBoundary(); }
+  renderAnnos();
+}
+async function syncReach() {
+  let r = null;
+  if (annos.reach && ctx.coordinates) try { r = await api.get('/reach'); } catch {}
+  scene.setReach(annos.reach ? r : null);
+}
+
+/* the safety boundary: shown with the reach, and while its editor is open (then as typed, not yet applied) */
+let boundsOpen = false;
+const boxOf = ([x0, y0, x1, y1], m) => [x0 + m.left, y0 + m.down, x1 - m.right, y1 - m.up];
+function boundsDraft() {                        // the editor's margins (m), or null while one isn't a number
+  const m = {};
+  for (const inp of document.querySelectorAll('#bounds-pop input')) {
+    const v = parseFloat(inp.value);
+    if (!Number.isFinite(v)) return null;
+    m[inp.dataset.side] = v / 100;
+  }
+  return m;
+}
+function syncBoundary() {
+  const b = S?.boundary, m = boundsOpen && boundsDraft();
+  const shown = b && (m ? { ...b, box: boxOf(b.table, m) } : b);
+  scene.setBoundary(boundsOpen || annos.reach ? shown ?? null : null);
+  if (!boundsOpen || !b) return;
+  const [tx0, ty0, tx1, ty1] = b.table, [x0, y0, x1, y1] = shown.box, w = tx1 - tx0, d = ty1 - ty0;
+  Object.assign($('bounds-pop').querySelector('.bounds-box').style, {       // the table drawn to scale
+    left: `${(x0 - tx0) / w * 100}%`, right: `${(tx1 - x1) / w * 100}%`,
+    top: `${(ty1 - y1) / d * 100}%`, bottom: `${(y0 - ty0) / d * 100}%`,
+  });
+}
+function openBounds(open) {
+  boundsOpen = open && !!S?.boundary;
+  $('bounds-pop').hidden = !boundsOpen;
+  $('bounds').setAttribute('aria-expanded', String(boundsOpen));
+  $('bounds-err').hidden = true;
+  if (boundsOpen) for (const inp of document.querySelectorAll('#bounds-pop input'))
+    inp.value = +(S.boundary.margins[inp.dataset.side] * 100).toFixed(1);
+  syncBoundary();
+}
+$('bounds-pop').addEventListener('input', syncBoundary);
+$('bounds-pop').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('bounds-apply').click();
+  if (e.key === 'Escape') openBounds(false);
+});
+async function applyBounds() {
+  const m = boundsDraft();
+  try {
+    if (!m) throw new Error('Each margin is a number of centimetres.');
+    await api.put('/boundary', m);
+    openBounds(false);
+  } catch (e) {
+    $('bounds-err').textContent = e.message;
+    $('bounds-err').hidden = false;
+  }
 }
 
 function renderBrowser(force) {
@@ -92,9 +162,10 @@ function renderBrowser(force) {
 function renderDock(force) {
   const m = W.active(S);
   const running = m?.name === ui.selected;
+  const last = S?.last_run?.name === ui.selected ? S.last_run.params : null;   // however it was started
   /* the body holds editable params: redraw it only when the selection or the running FSM moves */
-  const key = JSON.stringify([ui.selected, running && m.history, running && m.state, S?.requirements?.[ui.selected], !!m]);
-  if (changed('dock', key) || force) $('dock-body').innerHTML = W.dock(S, ui.selected, serverNow);
+  const key = JSON.stringify([ui.selected, running && m.history, running && m.state, S?.requirements?.[ui.selected], !!m, last]);
+  if (changed('dock', key) || force) $('dock-body').innerHTML = W.dock(S, ui.selected, serverNow, last);
   else if (running) $('dock-body').querySelectorAll('.vstep.cur .vt').forEach(el => {
     el.textContent = `${(serverNow - m.since).toFixed(serverNow - m.since < 10 ? 1 : 0)} s ●`;
   });
@@ -208,7 +279,7 @@ let robot, mods, topics;
 try {
   [robot, mods, topics] = await Promise.all([api.get('/robot'), api.get('/mods'), api.get('/topics')]);
 } catch (err) {
-  document.body.innerHTML = '<p class="needserver">The robot API is not reachable. Start it from the repo root with <code>uv run python -m myaloha panel</code> (or <code>--sim</code> without hardware); it serves this page at <code>http://127.0.0.1:8765/</code>.</p>';
+  document.body.innerHTML = '<p class="needserver">The robot API is not reachable. Start it from the repo root with <code>uv run python -m myaloha panel</code>; it serves this page at <code>http://127.0.0.1:8765/</code>.</p>';
   throw err;
 }
 ctx.robot = robot;
@@ -218,7 +289,6 @@ let savedTopics = {};
 try { savedTopics = JSON.parse(localStorage.getItem('myaloha-topics') || '{}'); } catch {}
 ui.topics = Object.fromEntries(topics.map(t => [t.name, { eye: true, mode: 'stream', period: 500, ...savedTopics[t.name] }]));
 ui.selected = mods[0]?.name;
-if (robot.sim) document.title = 'myaloha panel (sim)';
 
 const geos = {}, assets = {};
 for (const [model, file] of Object.entries(CFG.robots.specs)) assets[model] = await loadArmAssets(CFG.robots.dir, file, geos);
@@ -239,11 +309,25 @@ document.addEventListener('mouseover', e => { const m = e.target.closest('.qhelp
 document.addEventListener('focusin', e => { const m = e.target.closest('.qhelp'); if (m) showHelp(m); });
 document.addEventListener('mouseout', e => { if (e.target.closest('.qhelp')) $('qpop').hidden = true; });
 document.addEventListener('focusout', e => { if (e.target.closest('.qhelp')) $('qpop').hidden = true; });
+/* a log line: the whole record in the same popover, above the line (below it near the top) */
+function showLogRecord(line) {
+  const rec = ctx.log.find(l => l.seq === +line.dataset.seq);
+  if (!rec) return;
+  const pop = $('qpop');
+  pop.innerHTML = W.logDetail(rec);
+  pop.classList.add('logpop');
+  pop.hidden = false;
+  const r = line.getBoundingClientRect();
+  pop.style.left = `${Math.max(8, Math.min(innerWidth - pop.offsetWidth - 8, r.left))}px`;
+  pop.style.top = `${r.top - pop.offsetHeight - 6 >= 8 ? r.top - pop.offsetHeight - 6 : Math.min(innerHeight - pop.offsetHeight - 8, r.bottom + 6)}px`;
+}
+$('loglines').addEventListener('mouseover', e => { const l = e.target.closest('.ll'); if (l) showLogRecord(l); });
+$('loglines').addEventListener('mouseleave', () => { $('qpop').hidden = true; $('qpop').classList.remove('logpop'); });
 
 /* 3-D view controls */
 const showView = st => document.querySelectorAll('#views [data-view]').forEach(b => {
   const k = b.dataset.view;
-  if (k !== 'drape') b.setAttribute('aria-pressed', String(k in st ? !!st[k] : false));
+  if (k !== 'annos') b.setAttribute('aria-pressed', String(k in st ? !!st[k] : false));
 });
 let freeCam = false;
 try { freeCam = localStorage.getItem('myaloha-freecam') === 'on'; } catch {}
@@ -260,25 +344,29 @@ async function drapeLoop() {
     await new Promise(res => setTimeout(res, 160));
   }
 }
-function toggleDrape() {
-  const btn = document.querySelector('[data-view="drape"]');
-  if (drapeOn) { drapeOn = false; scene.setDrape(null); btn.setAttribute('aria-pressed', 'false'); return; }
-  if (drapeBlocked()) return;
+function startDrape() {
   drapeOn = true;
-  btn.setAttribute('aria-pressed', 'true');
   scene.setDrape(ctx.coordinates.cameras.high);
   drapeLoop();
 }
+function toggleAnnosMenu(open = $('annos').hidden) {
+  $('annos').hidden = !open;
+  document.querySelector('[data-view="annos"]').setAttribute('aria-expanded', String(open));
+}
+document.addEventListener('change', e => { const a = e.target.closest('[data-anno]'); if (a) setAnno(a.dataset.anno, a.checked); });
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.annos')) toggleAnnosMenu(false); });
+scene.setGrid(annos.grid ? 0.03 : 0);
 
 function viewAction(k) {
-  if (k === 'drape') { toggleDrape(); return; }
+  if (k === 'annos') { toggleAnnosMenu(); return; }
+  if (k === 'drape') { if (!drapeBlocked()) setAnno('table', !annos.table); return; }
   if (k === 'free') {
     freeCam = !freeCam;
     try { localStorage.setItem('myaloha-freecam', freeCam ? 'on' : 'off'); } catch {}
     showView(scene.setFree(freeCam));
   } else showView(scene.setView(k));
 }
-const VIEW_KEYS = { q: 'left', e: 'right', h: 'home', r: 'top', f: 'front', v: 'free', t: 'drape' };
+const VIEW_KEYS = { q: 'left', e: 'right', h: 'home', r: 'top', f: 'front', v: 'free', t: 'drape', a: 'annos' };
 document.addEventListener('keydown', e => {
   const k = VIEW_KEYS[e.key.toLowerCase()];
   if (k && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches('input, textarea')) viewAction(k);
@@ -294,7 +382,11 @@ host.addEventListener('rendered', () => {
     const p = scene.projectPoint(xyz);
     return `<div class="cam-tag" style="left:${p.x}px;top:${p.y}px">${W.esc(S.cameras?.[key]?.label ?? key)}</div>`;
   }).join('');
-  $('tags').innerHTML = axisLabels + camLabels + W.ARM_ORDER.filter(n => S.arms[n]).map(n => {
+  const h = scene.hoveredCube(), c = h?.cube;
+  const cubeLabel = c ? `<div class="tag" style="left:${h.x}px;top:${h.y}px">cube ${c.track} · ${W.esc(c.color ?? 'hidden')}` +
+    `<span class="sub">${c.level === null ? `in the air, z ${c.z.toFixed(3)}` : `level ${c.level}`} · ` +
+    `(${c.x.toFixed(3)}, ${c.y.toFixed(3)})</span></div>` : '';
+  $('tags').innerHTML = axisLabels + camLabels + cubeLabel + W.ARM_ORDER.filter(n => S.arms[n]).map(n => {
     const a = S.arms[n], p = scene.project(n);
     return `<div class="tag ${W.armLive(a) ? '' : 'off'}" style="left:${p.x}px;top:${p.y}px" title="${W.esc(a.error || a.ip)}">${W.dot(W.armKind(a))}${W.armLabel(n)}<span class="sub">${W.modeText(a)}</span></div>`;
   }).join('');
@@ -312,7 +404,7 @@ const setCamKind = api.cameras((key, kind, blob) => {
   camURL[key] = url;
 });
 
-let frame = 0, coordId;
+let frame = 0, coordId, boundsKey;
 send = api.stream({
   link(up) { link = up; renderBrand(); renderDock(true); },
   state(msg) {
@@ -325,9 +417,16 @@ send = api.stream({
         ctx.coordinates = doc;
         scene.setCoordinates(doc);
         if (drapeOn) scene.setDrape(doc?.cameras?.high ?? null);
-        renderDrapeButton();
+        renderAnnos();
+        syncReach();
         renderDock(true);
-      }).catch(() => {});
+      }).catch(() => { coordId = undefined; });    // fetch it again on the next state frame
+    }
+    const bk = JSON.stringify(S.boundary?.box);
+    if (bk !== boundsKey) {                        // the reach is clipped to it: fetched again
+      boundsKey = bk;
+      syncReach();
+      if (!boundsOpen) syncBoundary();
     }
     if (first && W.active(S)) ui.selected = W.active(S).name;
     if (!frame) frame = requestAnimationFrame(() => {   // one paint per display frame at most
@@ -428,6 +527,9 @@ document.addEventListener('click', e => {
       .finally(() => { btn.disabled = false; btn.querySelector('span').textContent = 'Reconnect'; });
     return;
   }
+  if (t.closest('#bounds')) { openBounds(!boundsOpen); return; }
+  if (t.closest('#bounds-cancel')) { openBounds(false); return; }
+  if (t.closest('#bounds-apply')) { applyBounds(); return; }
   if (t.closest('#theme')) {
     theme = theme === 'light' ? 'dark' : 'light';
     document.documentElement.dataset.theme = theme;

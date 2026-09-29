@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulated rig</title>
+<style>
+  :root { --bg: #f4f3ef; --panel: #fff; --ink: #1d1d1b; --muted: #77756f; --line: #dddad2; --accent: #2f6fdf;
+          --bad: #c8412f; --table: #e3d5bd; --floor: #cfcdc6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --panel: #20201e; --ink: #ecebe6; --muted: #9a988f; --line: #34332f;
+            --table: #4a4234; --floor: #2a2926; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  header { display: flex; gap: 16px; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; }
+  header span { color: var(--muted); }
+  main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  canvas { width: 100%; display: block; }
+  .cams { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cams figure { margin: 0; }
+  .cams img { width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 4px; display: block; }
+  .cams figcaption { font-size: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+  td, th { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  input { width: 70px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+  button { padding: 4px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); cursor: pointer; }
+  button.off { color: var(--bad); border-color: var(--bad); }
+  .stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+</style>
+</head>
+<body>
+<header><h1>Simulated rig</h1><span id="meta"></span></header>
+<main>
+  <div class="stack">
+    <section><h2>Ground truth (top view, W)</h2><canvas id="top" width="1200" height="760"></canvas></section>
+    <section><h2>Cubes</h2><table id="cubes"></table></section>
+  </div>
+  <div class="stack">
+    <section><h2>Cameras</h2><div class="cams" id="cams"></div></section>
+    <section>
+      <h2>Scene</h2>
+      <div class="row">cubes <input id="count" type="number" min="0" max="16" placeholder="config">
+        seed <input id="seed" type="number" placeholder="random"> <button id="spawn">New scene</button></div>
+      <h2>Devices</h2><div class="row" id="devices"></div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const X0 = -0.6, X1 = 0.6, Y0 = -0.42, Y1 = 0.42;
+let info = null;
+
+const api = async (path, opts) => (await fetch(path, opts)).json();
+const rgb = (c) => `rgb(${c.join(',')})`;
+
+async function loadInfo() {
+  info = await api('/api/info');
+  $('meta').textContent = `seed ${info.seed} · ${Object.keys(info.arms).length} arms · ${Object.keys(info.cameras).length} cameras`;
+  const dev = $('devices'); dev.innerHTML = '';
+  for (const name of [...Object.values(info.arms), ...Object.values(info.cameras)]) {
+    const id = Object.entries({...info.arms, ...info.cameras}).find(([, n]) => n === name)[0];
+    const off = info.unplugged.includes(id);
+    const b = document.createElement('button');
+    b.textContent = `${name}: ${off ? 'unplugged' : 'on'}`;
+    if (off) b.className = 'off';
+    b.onclick = async () => { await api(`/api/${off ? 'plug' : 'unplug'}/${name}`, {method: 'POST'}); loadInfo(); };
+    dev.append(b);
+  }
+  const cams = $('cams'); cams.innerHTML = '';
+  for (const name of Object.values(info.cameras)) {
+    cams.insertAdjacentHTML('beforeend', `<figure><img data-cam="${name}" alt="${name}"><figcaption>${name}</figcaption></figure>`);
+  }
+}
+
+function draw(truth) {
+  const cv = $('top'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
+  const css = getComputedStyle(document.documentElement);
+  const sx = W / (X1 - X0), sy = H / (Y1 - Y0);
+  const px = (x) => (x - X0) * sx, py = (y) => H - (y - Y0) * sy;
+  g.fillStyle = css.getPropertyValue('--floor'); g.fillRect(0, 0, W, H);
+  const [tx0, ty0, tx1, ty1] = info.table.extent;
+  g.fillStyle = css.getPropertyValue('--table'); g.fillRect(px(tx0), py(ty1), (tx1 - tx0) * sx, (ty1 - ty0) * sy);
+  if (info.table.sheet.length) {
+    const [w, h] = info.table.sheet; g.fillStyle = '#f4f4f0';
+    g.fillRect(px(-w / 2), py(h / 2), w * sx, h * sy);
+  }
+  g.strokeStyle = css.getPropertyValue('--line'); g.lineWidth = 1;
+  for (let x = -0.5; x <= 0.5001; x += 0.1) { g.beginPath(); g.moveTo(px(x), 0); g.lineTo(px(x), H); g.stroke(); }
+  for (let y = -0.4; y <= 0.4001; y += 0.1) { g.beginPath(); g.moveTo(0, py(y)); g.lineTo(W, py(y)); g.stroke(); }
+  g.fillStyle = css.getPropertyValue('--muted'); g.font = '20px system-ui';
+  for (const [name, [x, y]] of Object.entries(info.mounts)) {
+    g.fillRect(px(x) - 22, py(y) - 22, 44, 44); g.fillText(name, px(x) - 40, py(y) + 44);
+  }
+  const S = info.size;
+  const cubes = [...truth.cubes].sort((a, b) => a.z - b.z);
+  for (const c of cubes) {
+    g.save(); g.translate(px(c.x), py(c.y)); g.rotate(-c.yaw * Math.PI / 180);
+    g.fillStyle = rgb(info.colors[c.color]); g.strokeStyle = c.held_by ? '#fff' : '#0008'; g.lineWidth = c.held_by ? 4 : 2;
+    g.fillRect(-S / 2 * sx, -S / 2 * sy, S * sx, S * sy); g.strokeRect(-S / 2 * sx, -S / 2 * sy, S * sx, S * sy);
+    g.restore();
+    if (c.level > 0) { g.fillStyle = '#fff'; g.font = 'bold 18px system-ui'; g.fillText(c.level, px(c.x) - 5, py(c.y) + 6); }
+  }
+  for (const [name, [x, y, z]] of Object.entries(truth.tools)) {
+    g.strokeStyle = css.getPropertyValue('--accent'); g.lineWidth = 3;
+    g.beginPath(); g.arc(px(x), py(y), 12, 0, 2 * Math.PI); g.stroke();
+    g.fillStyle = css.getPropertyValue('--accent'); g.font = '18px system-ui';
+    g.fillText(`${name.replace('follower_', '')} z ${(z * 100).toFixed(1)} cm`, px(x) + 16, py(y) - 10);
+  }
+}
+
+function list(truth) {
+  $('cubes').innerHTML = '<tr><th>colour</th><th>x</th><th>y</th><th>z</th><th>level</th><th>yaw</th><th>held by</th></tr>' +
+    truth.cubes.map((c) => `<tr><td><span class="swatch" style="background:${rgb(info.colors[c.color])}"></span>${c.color}</td>
+      <td>${c.x.toFixed(3)}</td><td>${c.y.toFixed(3)}</td><td>${c.z.toFixed(3)}</td><td>${c.level}</td>
+      <td>${c.yaw.toFixed(0)}°</td><td>${c.held_by || ''}</td></tr>`).join('');
+}
+
+async function tick() {
+  try { const t = await api('/api/truth'); draw(t); list(t); } catch (e) { $('meta').textContent = 'simulator not responding'; }
+}
+function cams() {
+  for (const img of document.querySelectorAll('img[data-cam]')) {
+    const next = new Image();
+    next.onload = () => { img.src = next.src; };
+    next.src = `/api/frame/${img.dataset.cam}.jpg?t=${Date.now()}`;
+  }
+}
+$('spawn').onclick = async () => {
+  const q = new URLSearchParams();
+  if ($('count').value) q.set('count', $('count').value);
+  if ($('seed').value) q.set('seed', $('seed').value);
+  await api(`/api/spawn?${q}`, {method: 'POST'}); loadInfo();
+};
+loadInfo().then(() => { tick(); cams(); setInterval(tick, 200); setInterval(cams, 1000); });
+</script>
+</body>
+</html>

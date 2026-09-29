@@ -63,6 +63,9 @@ def evaluate(needs, robot, sides=None) -> dict:
 def _up(robot, name: str) -> bool:
     if name == "coordinates":   # not a device: a finished localize run
         return bool(robot.coordinates)
+    if name.startswith("topic:"):   # not a device: a running topic
+        topics = robot.topics
+        return bool(topics and topics.status()[name[6:]]["state"] in ("running", "waiting"))
     if name in robot.arms:
         return robot.arms[name].connected and not robot.arms[name].lost
     cams = robot.cameras.status() if robot.cameras else {}
@@ -187,6 +190,11 @@ class Mod:
 
     def execute(self) -> None:
         raise NotImplementedError
+
+    def input(self, data: dict) -> dict:
+        """Input from a client while running (an interactive mod's choice); returns the status.
+        ValueError: bad input; RuntimeError: not ready for it."""
+        raise ValueError(f"{self.name} takes no input")
 
     def stop(self) -> None:
         if not self._stop.is_set():

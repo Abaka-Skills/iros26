@@ -7,6 +7,7 @@
     Camera WS  every camera over one socket (the panel uses this)      /api/cameras/ws
     Docs       every endpoint, interactive                             /docs
     Static     the panel (index.html) and the visitor page             /
+               iros26's page, only while that mod runs                 /pickandplay.html
 """
 import asyncio
 import collections
@@ -26,9 +27,10 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from myaloha import mcp_server
+from myaloha import cubes, mcp_server
 from myaloha.mods import MODS
 from myaloha.mods.base import RequirementError
+from myaloha.reach import table_regions
 from myaloha.topics import TOPICS
 from myaloha.topics.manager import TopicError, TopicManager
 
@@ -49,15 +51,18 @@ class LogBuffer(logging.Handler):
         with self._lock:
             self.seq += 1
             self.records.append({"seq": self.seq, "t": record.created, "level": record.levelname.lower(),
-                                 "src": record.name.rsplit(".", 1)[-1], "msg": record.getMessage()})
+                                 "src": record.name.rsplit(".", 1)[-1], "logger": record.name,
+                                 "msg": record.getMessage(),
+                                 "exc": logging.Formatter().formatException(record.exc_info) if record.exc_info else None})
 
     def since(self, seq: int, limit: int = 500) -> list[dict]:
         with self._lock:
             return [r for r in self.records if r["seq"] > seq][-limit:]
 
 
-def create_app(robot, logs: LogBuffer, sim: bool = False, topics: TopicManager | None = None) -> FastAPI:
+def create_app(robot, logs: LogBuffer, topics: TopicManager | None = None) -> FastAPI:
     topics = topics or TopicManager(robot, "http://127.0.0.1:8765")
+    robot.topics = topics
     mcp = mcp_server.build(robot, topics)
     mcp_http = mcp.streamable_http_app(streamable_http_path="/mcp")
 
@@ -98,7 +103,6 @@ def create_app(robot, logs: LogBuffer, sim: bool = False, topics: TopicManager |
     @app.get("/api/robot", tags=["robot"], summary="Static description: major states, arm and camera specs")
     def robot_info():
         return {
-            "sim": sim,
             "states": robot.STATES,
             "arms": [asdict(a.spec) for a in robot.arms.values()],
             "cameras": [asdict(s) for s in robot.cameras.specs.values()] if robot.cameras else [],
@@ -150,6 +154,38 @@ def create_app(robot, logs: LogBuffer, sim: bool = False, topics: TopicManager |
         if not robot.coordinates:
             raise HTTPException(404, "no coordinates yet; run the localize mod")
         return robot.coordinates
+
+    @app.get("/api/reach", tags=["robot"],
+             summary="Where each follower can pick or place straight down on the table, as pick_place plans: "
+                     "{side: [{outer: [[x, y], ...], holes: [...]}]} in W (m), from the measured reach map, "
+                     "inside the safety boundary")
+    def reach():
+        if not robot.coordinates:
+            raise HTTPException(404, "no coordinates yet; run the localize mod")
+        return {s: table_regions(np.array(T), extent=robot.boundary.box())
+                for s, T in robot.coordinates["T_W_base"].items()}
+
+    @app.get("/api/boundary", tags=["safety"],
+             summary="The safety boundary no planned tool point leaves: margins in from the table's edges (m; up "
+                     "+y far, down -y operator's side, left -x, right +x), the box they leave, the table (x0 y0 x1 y1, W)")
+    def boundary():
+        return robot.boundary.status()
+
+    @app.put("/api/boundary", tags=["safety"],
+             summary="Set some margins (m), kept for this rig; plans made from now on keep inside. 422 for a "
+                     "negative margin or one that leaves no table")
+    def set_boundary(margins: dict = Body(...)):
+        try:
+            robot.boundary.set(**margins)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(422, str(e))
+        logger.info("safety boundary: %s", ", ".join(f"{k} {v * 100:.1f} cm" for k, v in robot.boundary.margins.items()))
+        return robot.boundary.status()
+
+    @app.get("/api/colors", tags=["robot"],
+             summary="The colour recognition profile in use (config/colors/, chosen with panel --colors)")
+    def color_profile():
+        return cubes.PALETTE.doc
 
     @app.get("/api/coordinates/matches.jpg", tags=["robot"], summary="The SIFT matches behind the latest result",
              responses={200: {"content": {"image/jpeg": {}}}})
@@ -300,6 +336,22 @@ def create_app(robot, logs: LogBuffer, sim: bool = False, topics: TopicManager |
             raise HTTPException(409, str(e))
         return m.status()
 
+    @app.post("/api/mods/{name}/input", tags=["mods"],
+              summary="Input for a running interactive mod; iros26 takes {track, target_x, target_y}: the cube "
+                      "(its locate_cubes track) and where to put it (W, m). 409: not running or not waiting "
+                      "for input; 422: bad input")
+    def mod_input(name: str, data: dict = Body(...)):
+        mod_or_404(name)
+        m = next((m for m in robot.mods if m.name == name), None)
+        if m is None:
+            raise HTTPException(409, f"{name} is not running")
+        try:
+            return m.input(data)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+
     # ---- topics ----
     def topic_or_404(name: str):
         if name not in TOPICS:
@@ -375,6 +427,13 @@ def create_app(robot, logs: LogBuffer, sim: bool = False, topics: TopicManager |
             pass
         finally:
             listener.cancel()
+
+    @app.get("/pickandplay.html", include_in_schema=False)
+    def pick_and_play():
+        """The iros26 mod's page: served only while it runs."""
+        if not any(m.name == "iros26" for m in robot.mods):
+            raise HTTPException(404, "pickandplay.html is served only while the iros26 mod runs: start iros26 first")
+        return FileResponse(PANEL / "pickandplay.html")
 
     app.mount("/", StaticFiles(directory=PANEL, html=True), name="panel")
     return app

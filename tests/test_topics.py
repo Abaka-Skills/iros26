@@ -1,4 +1,4 @@
-"""Topics as real child processes of a real (simulated-hardware) backend: dependencies on start
+"""Topics as real child processes of a real backend on the simulated rig: dependencies on start
 and stop, results over each topic's own port, a crash, and cleanup."""
 import logging
 import os
@@ -9,13 +9,10 @@ import time
 import httpx
 import numpy as np
 import pytest
-import trossen_arm
 import uvicorn
+from simrig import connect, release, simulated_rig
 
-from myaloha import sim
-from myaloha.cameras import CameraRig
 from myaloha.coords import look_at
-from myaloha.robot import Aloha
 from myaloha.server import LogBuffer, create_app
 from myaloha.topics.manager import TopicError, TopicManager, free_port
 
@@ -35,31 +32,24 @@ def coordinates() -> dict:
 
 @pytest.fixture(scope="module")
 def backend():
-    mp = pytest.MonkeyPatch()
-    mp.setattr(trossen_arm, "TrossenArmDriver", sim.SimDriver)
     logs = LogBuffer()
     logging.getLogger("myaloha").setLevel(logging.INFO)
     logging.getLogger("myaloha").addHandler(logs)
-    rig = CameraRig()
-    robot = Aloha(cameras=rig)
-    robot.connect(timeout=0.1)
-    sim.add_cameras(rig)
-    robot.start_monitor(hz=100)
-    robot.coordinates = coordinates()
-    port = free_port()
-    topics = TopicManager(robot, f"http://127.0.0.1:{port}")
-    server = uvicorn.Server(uvicorn.Config(create_app(robot, logs, sim=True, topics=topics), host="127.0.0.1",
-                                           port=port, log_level="warning"))
-    threading.Thread(target=server.run, daemon=True).start()
-    while not server.started:
-        time.sleep(0.05)
-    yield robot, topics, logs
-    topics.stop_all()
-    server.should_exit = True
-    robot.stop()
-    robot.disconnect()
+    with simulated_rig() as sim:
+        robot = connect(sim.address)
+        robot.coordinates = coordinates()
+        port = free_port()
+        topics = TopicManager(robot, f"http://127.0.0.1:{port}")
+        server = uvicorn.Server(uvicorn.Config(create_app(robot, logs, topics=topics), host="127.0.0.1",
+                                               port=port, log_level="warning"))
+        threading.Thread(target=server.run, daemon=True).start()
+        while not server.started:
+            time.sleep(0.05)
+        yield robot, topics, logs
+        topics.stop_all()
+        server.should_exit = True
+        release(robot)
     logging.getLogger("myaloha").removeHandler(logs)
-    mp.undo()
 
 
 def wait_for(cond, timeout=15.0):

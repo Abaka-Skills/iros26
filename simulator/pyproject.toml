@@ -1,0 +1,24 @@
+[project]
+name = "aloha-simulator"
+version = "0.1.0"
+description = "A simulated bimanual WidowX AI rig: arm controllers and RealSense cameras served over the network device protocol"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "mujoco>=3.3",
+  "numpy>=2",
+  "opencv-python-headless>=4.10",
+  "pyyaml>=6",
+]
+
+[project.scripts]
+aloha-simulator = "simulator.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.10"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "simulator"
+
+[dependency-groups]
+dev = ["pytest"]

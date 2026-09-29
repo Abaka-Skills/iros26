@@ -1,6 +1,7 @@
 # PROGRESS v2
 
 Tracking from 2026-09-26 onward (earlier work: `PROGRESS.md`, frozen).
+The simulated rig (`simulator/`, `--simulator`) is tracked in [`PROGRESS_v3.md`](PROGRESS_v3.md).
 
 ## Design (settled in the grilling session, 2026-09-26)
 

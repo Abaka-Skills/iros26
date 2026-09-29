@@ -15,3 +15,7 @@ calib/
 CLAUDE.md
 _claude_tmp/
 .DS_Store
+MUJOCO_LOG.TXT
+
+# Local surveys and research notes
+_survey/

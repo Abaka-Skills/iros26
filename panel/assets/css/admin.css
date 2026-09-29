@@ -188,14 +188,38 @@ kbd{font:11px/1 "Inter",system-ui,sans-serif;color:var(--muted);padding:3px 6px;
 #estop-banner .btn{background:#fff;color:#7d160e;font-weight:600}
 #estop-banner .btn.armed{background:#ffd9d4}
 
+/* ---- safety boundary editor: under its button, by the E-stop; the table drawn to scale ---- */
+#bounds[aria-expanded="true"]{background:var(--ink);color:var(--page)}
+#bounds-pop{position:fixed;z-index:48;top:88px;right:222px;width:340px;padding:16px;display:grid;gap:12px;background:var(--panel-solid)}
+#bounds-pop[hidden]{display:none}
+#bounds-pop h4{margin:0}
+#bounds-pop .sub{margin:0;font-size:12px;line-height:1.45}
+.bounds-map{display:grid;grid-template-columns:auto 132px auto;grid-template-rows:auto 82px auto;gap:6px;align-items:center;justify-items:center;justify-content:center}
+.bounds-map .up{grid-area:1/2}
+.bounds-map .left{grid-area:2/1}
+.bounds-map .right{grid-area:2/3}
+.bounds-map .down{grid-area:3/2}
+.bounds-map .in{width:74px}
+.bounds-table{grid-area:2/2;position:relative;width:100%;height:100%;border-radius:6px;background:rgba(193,38,26,.14);border:1px solid var(--panel-b)}
+.bounds-box{position:absolute;border:1.5px solid #c1261a;border-radius:2px;background:var(--panel-solid)}
+.bounds-err{margin:0;color:var(--err);font-size:12.5px}
+
 /* ---- 3-D view controls: bottom centre of the rig area, above the log ---- */
-#views{left:calc((var(--mid-l) + 100vw - 386px) / 2);transform:translateX(-50%);bottom:224px;height:44px;padding:0 4px;gap:4px;transition:left .25s ease}
+#views{z-index:4;left:calc((var(--mid-l) + 100vw - 386px) / 2);transform:translateX(-50%);bottom:224px;height:44px;padding:0 4px;gap:4px;transition:left .25s ease}
 #views .btn{height:34px}
 #views .btn.icon{width:34px}
 #views .btn svg{width:17px;height:17px}
 #views .btn[aria-pressed="true"]{background:var(--ink);color:var(--page)}
 #views .btn.busy{opacity:.5;cursor:progress}
 #views .btn:disabled{opacity:.35;cursor:not-allowed;background:var(--hi)}
+#views .annos{position:relative;display:flex}
+#views .annos-menu{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);display:flex;flex-direction:column;
+  gap:2px;padding:6px;background:var(--panel);border:1px solid var(--panel-b);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.12);white-space:nowrap}
+#views .annos-menu[hidden]{display:none}
+#views .annos-menu label{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 6px;border-radius:7px;font-size:12.5px;cursor:pointer}
+#views .annos-menu label:hover{background:var(--hi)}
+#views .annos-menu label.off{opacity:.4;cursor:not-allowed}
+#views .annos-menu .sub{margin-left:auto;padding-left:14px}
 #views .vsep{width:1px;height:22px;background:var(--panel-b);margin:0 2px}
 
 /* ---- W axes labels + result card ---- */
@@ -215,6 +239,13 @@ kbd{font:11px/1 "Inter",system-ui,sans-serif;color:var(--muted);padding:3px 6px;
 #qpop{position:fixed;z-index:60;width:420px;padding:12px;border-radius:14px;background:var(--panel-solid);
   border:1px solid var(--panel-b);box-shadow:var(--shadow);color:var(--ink);font:12px/1.45 "Inter",system-ui,sans-serif;pointer-events:none}
 #qpop img{display:block;width:100%;aspect-ratio:400/250;margin-top:10px;border-radius:10px}
+#qpop.logpop{width:min(640px,calc(100vw - 16px))}
+.ldh{display:flex;gap:10px;align-items:baseline;color:var(--muted);font:11px/1.4 ui-monospace,"SF Mono",Menlo,monospace}
+.ldh .lv{text-transform:uppercase;font-weight:600}
+.ldh .lv.warning{color:var(--warn-text)}
+.ldh .lv.error,.ldh .lv.critical{color:var(--err)}
+.ldm,.ldx{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:11.5px/1.5 ui-monospace,"SF Mono",Menlo,monospace}
+.ldx{max-height:40vh;overflow:hidden;color:var(--err);font-size:10.5px}
 
 /* ---- topics (in the mods panel, under the list) ---- */
 .tsec{flex:none;border-top:1px solid var(--panel-b);padding-top:10px;max-height:45%;overflow:auto;scrollbar-width:thin}

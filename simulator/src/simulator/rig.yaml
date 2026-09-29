@@ -1,0 +1,86 @@
+# The simulated rig, read once at launch:  uv run python -m simulator [--config this.yaml] [--set key=value ...]
+# Everything the simulator knows lives here. Lengths in metres, angles in degrees, W: table
+# frame (z up, origin midway between the follower bases), as localize defines it on the real rig.
+
+listen: 127.0.0.1:8810        # the devices (arm controllers, cameras), over the network device protocol
+ui: 127.0.0.1:8811            # the simulator's own page: ground truth, cameras, scene and device controls
+seed: null                    # scene and every error drawn from it; null: random (printed at launch)
+render_fps: 15                # per camera; the real D405s run at 30
+urdf: assets/wxai_follower.urdf   # the follower (its meshes in assets/meshes); paths here are relative to this file
+
+# Arm controllers, by the IP the backend addresses them at. Followers act in the world; leaders
+# only answer (in gravity comp they drift as if an operator moved them).
+arms:
+  192.168.10.3: {name: leader_left, role: leader}
+  192.168.10.2: {name: leader_right, role: leader}
+  192.168.10.5: {name: follower_left, role: follower, mount: [-0.466, 0.0, 0.022, 0]}     # x y z yaw
+  192.168.10.4: {name: follower_right, role: follower, mount: [0.466, 0.0, 0.029, 180]}
+unplugged: []                 # arm IPs or names, camera serials or names, absent at launch
+
+# Cameras, by serial. K: fx fy cx cy (true; each reports a slightly different factory K).
+# Fixed: T_W_cam (camera optical frame in W). On an arm: the follower's IP and T_ee_cam (optical
+# frame in the tool frame, ee_gripper_link) as mounted.
+cameras:
+  "218622271652":
+    name: high
+    K: [392.3, 391.9, 322.6, 241.5]
+    T_W_cam: [[1.0, 0.0103, 0.0015, -0.019], [0.0087, -0.9055, 0.4243, -0.310], [0.0058, -0.4243, -0.9055, 1.031], [0, 0, 0, 1]]
+  "230322270466":
+    name: low
+    K: [390.0, 389.5, 316.4, 241.1]
+    T_W_cam: [[0.9994, 0.0068, -0.035, -0.002], [0.0342, 0.0966, 0.9947, -0.362], [0.0102, -0.9953, 0.0963, 0.032], [0, 0, 0, 1]]
+  "218622271803":
+    name: wrist_left
+    K: [386.0, 385.6, 319.2, 243.0]
+    arm: 192.168.10.5
+    T_ee_cam: [[-0.0069, -0.3361, 0.9418, -0.1054], [-1.0, -0.0027, -0.0083, 0.0087], [0.0053, -0.9418, -0.3361, 0.0537], [0, 0, 0, 1]]
+  "218622272313":
+    name: wrist_right
+    K: [386.0, 385.6, 319.2, 243.0]
+    arm: 192.168.10.4
+    T_ee_cam: [[-0.0016, -0.3291, 0.9443, -0.1011], [-1.0, -0.0027, -0.0027, 0.0103], [0.0034, -0.9443, -0.3291, 0.0536], [0, 0, 0, 1]]
+size: [640, 480]
+
+# The D405's depth: passive stereo from its left imager. Its errors (in `errors`) are in disparity.
+sensor:
+  artifacts: false            # true: the stereo artifacts below the rig's depth shows (left band and shadows,
+                              # holes on dark flat surfaces, an unaligned depth stream the backend re-aligns)
+  baseline: 0.018             # m between the imagers: the left band and the shadows left of near objects
+  correlation_px: 32          # the disparity noise is blotchy over this many pixels, not per pixel
+  depth_focal: 0.975          # the depth stream's focal length vs colour's: the backend re-aligns it (seams)
+
+table:
+  extent: [-0.6, -0.39, 0.6, 0.47]  # x0 y0 x1 y1 of the top (y0: front edge); the floor is 0.75 m below
+  texture: procedural         # or an image file (a photo of the table top), stretched over `extent`
+  sheet: [0.21, 0.297]        # a printed sheet at the origin (w along x, h along y); [] for none
+
+cubes:
+  size: 0.025
+  # sRGB of each colour as the rig's overhead camera saw the real cubes (2026-09-26)
+  colors: {red: [209, 50, 55], orange: [220, 103, 92], yellow: [249, 189, 84], green: [5, 107, 119],
+           blue: [0, 73, 157], purple: [32, 58, 97]}
+  count: 8                    # scattered at random (seeded): one 2-stack, sometimes a 3-stack
+  scene: []                   # or explicit cubes, replacing the random ones: [{color, x, y, yaw, level}]
+
+# 1-sigma sizes of everything the backend can't know; `noise` scales them all (0: a perfect world)
+noise: 1.0
+errors:
+  joint_offset: 0.25          # deg, fixed per joint: the URDF's zero vs the encoder's
+  joint_jitter: 0.03          # deg, per reading
+  gripper_jitter: 0.00005     # m, per reading
+  effort_jitter: 0.03          # N m (fingers: N), per reading; a guess until measured on the rig
+  droop: 0.03                 # rad of shoulder sag per metre of reach
+  handeye_mm: 2.0             # each wrist camera's true mount vs T_ee_cam above
+  handeye_deg: 0.5
+  focal: 0.005                # reported vs true focal length, relative
+  centre_px: 1.5              # reported vs true principal point
+  pixel: 2.5                  # colour noise (0-255)
+  exposure: 0.06              # per camera, relative
+  tint: 0.03                  # per camera and channel, relative
+  albedo: 3.0                 # per cube, Lab units
+  depth_subpixel: 0.1         # px of disparity noise, blotchy: ~0.5 mm at 0.2 m, ~10 mm at 1 m (rig: 0.4 / 11 mm)
+  texture_holes: 1.0          # how readily dark, textureless surfaces (the black fingers) lose depth; 0: never
+  edge_drop: 0.5              # fraction of pixels lost at depth edges
+  depth_scale: 0.01           # per camera, relative
+  range_bias: 0.03            # wrist cameras: reading long by this fraction beyond 0.4 m
+  dropout: 0.02               # fraction of depth pixels lost at random

@@ -7,9 +7,11 @@ Leaders are optional: an arm that fails to connect is recorded, not raised.
 
 Live state: a monitor thread copies each arm's robot output (cached by the driver, ~0.1 ms to
 read) into Arm.live at `hz`, and re-reads the joint modes (a network round trip) at `mode_hz`.
-An arm whose output timestamp stops advancing is reported as lost.
+An arm whose output timestamp stops advancing is reported as lost. Alongside, every RECONNECT_S an
+arm that is lost or absent is connected again as soon as its controller answers (no motion).
 """
 import logging
+import socket
 import threading
 import time
 from dataclasses import dataclass
@@ -20,9 +22,14 @@ from lerobot_robot_trossen.widowxai_follower import WidowXAIFollower
 from lerobot_teleoperator_trossen.config_widowxai_leader import WidowXAILeaderTeleopConfig
 from lerobot_teleoperator_trossen.widowxai_leader import WidowXAILeaderTeleop
 
+from myaloha import netdev
+from myaloha.safety import Boundary
+
 log = logging.getLogger("myaloha.robot")
 
 STALE_S = 0.5  # no new robot output for this long: the arm is lost
+RECONNECT_S = 3.0        # an arm lost or absent is tried again this often, once its controller answers
+CONTROLLER_PORT = 50001  # the arm controller's TCP server (what the driver connects to)
 # Shoulder and elbow (joint_1, joint_2) have lower limits of 0 rad (URDF). Released into gravity
 # comp within this margin of them, the controller's limit push fights the compensation.
 LIMIT_MARGIN = 0.1
@@ -52,7 +59,7 @@ DEFAULT_ARMS = (
 
 
 class Arm:
-    def __init__(self, spec: ArmSpec):
+    def __init__(self, spec: ArmSpec, hardware: str | None = None):
         self.spec = spec
         if spec.role == "follower":
             self.lerobot = WidowXAIFollower(WidowXAIFollowerConfig(ip_address=spec.ip, id=spec.name))
@@ -60,6 +67,9 @@ class Arm:
         else:
             self.lerobot = WidowXAILeaderTeleop(WidowXAILeaderTeleopConfig(ip_address=spec.ip, id=spec.name))
             self.end_effector = trossen_arm.StandardEndEffector.wxai_v0_leader
+        self.hardware = hardware
+        if hardware:   # the controllers are served over the network (myaloha.netdev)
+            self.lerobot.driver = netdev.ArmClient(hardware)
         # The driver's thread safety is undocumented: every call goes through this lock.
         self.lock = threading.RLock()
         self.error: str | None = None
@@ -85,7 +95,14 @@ class Arm:
     def staged_positions(self) -> list[float]:
         return list(self.lerobot.config.staged_positions)
 
-    def connect(self, timeout: float) -> None:
+    def connect(self, timeout: float, quiet: bool = False) -> None:
+        """Configure the driver (no motion), releasing a lost session first. `quiet`: a failure that
+        repeats the last one is not logged."""
+        if self.connected and self.lost:
+            try:
+                self.disconnect()
+            except Exception as e:
+                log.warning("%s: releasing the lost session failed: %s", self.name, e)
         try:
             with self.lock:
                 self.driver.configure(trossen_arm.Model.wxai_v0, self.end_effector, self.spec.ip, True, timeout=timeout)
@@ -93,8 +110,20 @@ class Arm:
             self.refresh(modes=True)
             log.info("%s connected (%s): %s", self.name, self.spec.ip, "/".join(self.modes))
         except Exception as e:
+            if not (quiet and self.error == str(e)):
+                log.warning("%s (%s) not connected: %s", self.name, self.spec.ip, e)
             self.error = str(e)
-            log.warning("%s (%s) not connected: %s", self.name, self.spec.ip, e)
+
+    def reachable(self) -> bool:
+        """Worth a connect: the controller's port answers (cheap; a powered-off arm costs 0.3 s and no
+        driver retries). Through a device server (the simulator) it answers at once anyway."""
+        if self.hardware:
+            return True
+        try:
+            socket.create_connection((self.spec.ip, CONTROLLER_PORT), timeout=0.3).close()
+            return True
+        except OSError:
+            return False
 
     def refresh(self, modes: bool = False) -> None:
         """Copy the driver's latest output into `live`; with `modes`, re-read the joint modes too."""
@@ -143,6 +172,53 @@ class Arm:
     def hold(self) -> None:
         """Stiffen in place: position mode at the current pose."""
         self.move_to(self.positions(), goal_time=0.2)
+
+    # ---- arm and gripper apart: the arm moves while the gripper keeps a force hold ----
+    def move_arm(self, q: list[float], goal_time: float) -> None:
+        """Command the six arm joints only (position mode); returns at once."""
+        with self.lock:
+            self.check()
+            self.driver.set_arm_modes(trossen_arm.Mode.position)
+            self.driver.set_arm_positions(list(q), goal_time=goal_time, blocking=False)
+
+    def gripper_aperture(self) -> float:
+        """Distance between the finger pads (m): twice the carriage position."""
+        with self.lock:
+            return 2.0 * float(self.driver.get_gripper_position())
+
+    def set_gripper(self, aperture: float, goal_time: float = 1.0) -> None:
+        """Open or close to `aperture` (m) in position mode; returns at once."""
+        with self.lock:
+            self.check()
+            self.driver.set_gripper_mode(trossen_arm.Mode.position)
+            self.driver.set_gripper_position(min(max(aperture, 0.0), 0.08) / 2, goal_time=goal_time, blocking=False)
+
+    def close_on_object(self, squeeze: float = 0.004, speed: float = 0.012, timeout: float = 4.0,
+                        stopping=lambda: False) -> float:
+        """Close until the fingers stall (pads on an object, or shut), then hold it: position mode
+        aimed `squeeze` (m per finger) inside where they stopped, so the controller keeps pressing
+        with a bounded force, as teleop does when the leader closes past the object. Returns the
+        aperture (m). (Switching to external-effort mode instead let the fingers spring back open
+        on the rig: no grip left on the cube.)"""
+        with self.lock:
+            self.check()
+            w0 = self.gripper_aperture() / 2
+            self.driver.set_gripper_mode(trossen_arm.Mode.position)
+            self.driver.set_gripper_position(0.0, goal_time=max(1.0, w0 / speed), blocking=False)
+        t0, hist, pos = time.monotonic(), [], w0
+        while time.monotonic() - t0 < timeout and not stopping():
+            time.sleep(0.02)
+            pos = self.gripper_aperture() / 2
+            hist.append(pos)
+            if pos < 0.0008:                                                    # shut on nothing
+                break
+            if len(hist) >= 10 and hist[-10] - pos < 0.0004 and w0 - pos > 0.002:   # moved, then stalled
+                break
+        with self.lock:
+            self.check()
+            self.driver.set_gripper_position(max(pos - squeeze, 0.0), goal_time=0.3, blocking=False)
+        time.sleep(0.4)
+        return self.gripper_aperture()
 
     def free(self) -> None:
         """Gravity compensation: the arm floats and can be moved by hand. Refused on the
@@ -198,8 +274,10 @@ class Aloha:
         "estop": "emergency stop: arms braked, commands refused until reset",
     }
 
-    def __init__(self, specs=DEFAULT_ARMS, cameras=None):
-        self.arms = {spec.name: Arm(spec) for spec in specs}
+    def __init__(self, specs=DEFAULT_ARMS, cameras=None, hardware: str | None = None):
+        """`hardware`: host:port where the arm controllers are served (myaloha.netdev); None: the
+        controllers on the arms' own IPs, through the vendor driver."""
+        self.arms = {spec.name: Arm(spec, hardware) for spec in specs}
         self.cameras = cameras  # a myaloha.cameras.CameraRig, or None
         # Running mods, outermost first. A mod may only start when the stack is empty or its
         # parent is on top (composition).
@@ -211,19 +289,16 @@ class Aloha:
         self._monitor_stop = threading.Event()
         self.estopped = False
         self.coordinates: dict | None = None  # latest localize result (W, base poses)
+        self.boundary = Boundary()             # where planned tool points may be (launch loads the rig's own)
         self.last_run: dict | None = None      # status of the last top-level mod run, once it ended
+        self.topics = None                     # the TopicManager, once the server runs (mods can read topics)
 
     # ---- connections ----
     def connect(self, timeout: float = 5.0) -> None:
         """Connect every arm that is not connected yet, in parallel, so absent arms (e.g. leaders
-        off the network) cost one timeout in total. Sends no motion."""
-        for a in self.arms.values():
-            if a.connected and a.lost:   # it dropped off: release the dead session, then try afresh
-                try:
-                    a.disconnect()
-                except Exception as e:
-                    log.warning("%s: releasing the lost session failed: %s", a.name, e)
-        threads = [threading.Thread(target=a.connect, args=(timeout,)) for a in self.arms.values() if not a.connected]
+        off the network) cost one timeout in total. A lost arm is connected afresh. Sends no motion."""
+        threads = [threading.Thread(target=a.connect, args=(timeout,)) for a in self.arms.values()
+                   if not a.connected or a.lost]
         for t in threads:
             t.start()
         for t in threads:
@@ -254,12 +329,30 @@ class Aloha:
         self._monitor_stop.clear()
         self._monitor = threading.Thread(target=self._watch, args=(hz, mode_hz), name="arm-monitor", daemon=True)
         self._monitor.start()
+        self._reconnector = threading.Thread(target=self._reconnect, name="arm-reconnect", daemon=True)
+        self._reconnector.start()
 
     def stop_monitor(self) -> None:
         if self._monitor:
             self._monitor_stop.set()
             self._monitor.join()
+            self._reconnector.join()
             self._monitor = None
+
+    def _reconnect(self) -> None:
+        """Every RECONNECT_S: an arm that dropped (lost) or is absent is connected again once its
+        controller answers: the dead session released, the driver configured afresh. No motion."""
+        while not self._monitor_stop.wait(RECONNECT_S):
+            changed = False
+            for a in self.arms.values():
+                if self._monitor_stop.is_set():
+                    break
+                if (a.connected and not a.lost) or not a.reachable():
+                    continue
+                a.connect(timeout=2.0, quiet=True)   # logs "connected" when it is back
+                changed |= a.connected
+            if changed:
+                self._mark()
 
     def _watch(self, hz: float, mode_hz: float) -> None:
         period, next_modes = 1 / hz, 0.0
@@ -368,5 +461,6 @@ class Aloha:
             "arms": {name: arm.status() for name, arm in self.arms.items()},
             "cameras": self.cameras.status() if self.cameras else {},
             "coordinates": self.coordinates and {"id": self.coordinates["id"]},
+            "boundary": self.boundary.status(),
             "mods": [m.status() for m in self.mods],
         }

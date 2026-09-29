@@ -8,7 +8,7 @@ decrements it once per released interface: 3 for depth, 2 for color) keeps it ab
 librealsense's own releases never re-enumerate. Needs root. Same fix as
 viam-modules/viam-camera-realsense#182 (libusb 1.0.26 there; the bundled one here is 1.0.29).
 
-Used by myaloha.cameras and setup/check_cameras.py. Call capture_realsense() after `import pyrealsense2` and before creating any rs.context().
+Used by the relay (camrelay.realsense) and setup/check_cameras.py. Call capture_realsense() after `import pyrealsense2` and before creating any rs.context().
 """
 import ctypes
 import os

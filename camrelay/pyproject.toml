@@ -1,0 +1,20 @@
+[project]
+name = "camrelay"
+version = "0.1.0"
+description = "The RealSense cameras on USB, served on localhost over the network device protocol (the backend never opens USB)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "numpy>=2",
+  "pyrealsense2-macosx>=2.56; sys_platform == 'darwin'",
+  "pyrealsense2>=2.56; sys_platform == 'linux'",
+]
+
+[project.scripts]
+camrelay = "camrelay.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.10"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["pytest"]

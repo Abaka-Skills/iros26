@@ -1,9 +1,11 @@
 """Check the hardware, then serve the API and the panel on localhost and open it.
 
-    uv run python -m myaloha panel                  # real rig; re-runs itself under sudo for the cameras
-    uv run python -m myaloha panel --no-cameras     # arms only, no sudo
-    uv run python -m myaloha panel --sim            # no hardware
-    uv run python -m myaloha panel --sim --absent leader_right,wrist_right
+    uv run python -m myaloha panel                  # real rig: the arms, and the cameras from camrelay
+    uv run python -m myaloha panel --no-cameras     # arms only
+    uv run python -m myaloha panel --simulator 127.0.0.1:8810  # a simulator's arms and cameras
+
+No root needed: the cameras are opened by the camera relay (camrelay/, a launchd daemon), which also
+keeps the arms' network address on the USB Ethernet adapter.
 
 Nothing here moves an arm: connecting only configures the drivers. Ctrl-C stops any running
 mod (its arms hold), then releases the hardware.
@@ -24,23 +26,11 @@ IFACE, HOST_IP = "en14", "192.168.10.200"
 OK, NO, SKIP = "\033[32m✓\033[0m", "\033[31m✗\033[0m", "\033[33m–\033[0m"
 
 
-def ensure_root(args) -> None:
-    """RealSense on macOS needs root: re-run this command under sudo, keeping the same Python."""
-    if args.sim or args.no_cameras or sys.platform != "darwin" or os.geteuid() == 0:
-        return
-    print("Cameras need root on macOS; re-running under sudo (use --no-cameras to skip).")
-    os.chdir(REPO)
-    os.execvp("sudo", ["sudo", sys.executable, "-B", "-m", "myaloha", *sys.argv[1:]])
-
-
 def check_network(arms) -> None:
     out = subprocess.run(["ifconfig", IFACE], capture_output=True, text=True).stdout
     if f"inet {HOST_IP} " not in out:
-        if os.geteuid() == 0:
-            subprocess.run(["ifconfig", IFACE, "alias", HOST_IP, "255.255.255.0"], check=False)
-            print(f"  {OK} added {HOST_IP} to {IFACE}")
-        else:
-            print(f"  {NO} {IFACE} has no {HOST_IP}: run setup/find_arms.sh")
+        print(f"  {NO} {IFACE} has no {HOST_IP} (camrelay adds it when installed with --iface; or run "
+              f"setup/find_arms.sh)")
     else:
         print(f"  {OK} {IFACE} {HOST_IP}")
 
@@ -77,21 +67,14 @@ def report(robot) -> None:
         print(f"  {OK if r['met'] else NO} {name:<15} {'ready' if r['met'] else 'blocked: needs ' + '; '.join(unmet)}")
 
 
-def open_browser(url: str) -> None:
-    user = os.environ.get("SUDO_USER")
-    if os.geteuid() == 0 and user:  # open in the desktop user's browser, not root's
-        subprocess.run(["sudo", "-u", user, "open", url], check=False)
-    else:
-        webbrowser.open(url)
-
-
 def main(args) -> None:
-    ensure_root(args)
     import uvicorn
 
-    from myaloha import sim
+    from myaloha import colors, cubes
     from myaloha.cameras import CameraRig
+    from myaloha.mods import localize
     from myaloha.robot import DEFAULT_ARMS, Aloha
+    from myaloha.safety import Boundary
     from myaloha.server import LogBuffer, create_app
 
     sys.stdout.reconfigure(line_buffering=True)
@@ -104,29 +87,32 @@ def main(args) -> None:
     console.setFormatter(logging.Formatter("%(asctime)s %(name)s %(message)s", "%H:%M:%S"))
     root.addHandler(console)
 
-    absent = set(filter(None, args.absent.split(",")))
-    if args.sim:
-        sim.install(absent_ips=[a.ip for a in DEFAULT_ARMS if a.name in absent])
+    calib = Path(args.calib) if args.calib else REPO / "calib" / (
+        args.simulator.replace(":", "_") if args.simulator else "")      # each set of devices is its own rig
+    localize.CALIB = calib / "coordinates"
 
-    print(f"\nmyaloha preflight{' (sim)' if args.sim else ''}\nnetwork")
-    if args.sim:
-        print(f"  {SKIP} simulated")
+    print("\nmyaloha preflight\nnetwork")
+    if args.simulator:
+        print(f"  {OK} simulator at {args.simulator}")
     else:
         check_network(DEFAULT_ARMS)
 
-    from myaloha.mods.localize import load_latest
-
-    rig = CameraRig()
-    robot = Aloha(cameras=rig)
-    robot.coordinates = load_latest()
+    rig = CameraRig(hardware=args.simulator or args.cameras)
+    robot = Aloha(cameras=rig, hardware=args.simulator)
+    robot.coordinates = localize.load_latest()
+    print(f"calibration\n  {OK if robot.coordinates else SKIP} {os.path.relpath(localize.CALIB)}: "
+          f"{robot.coordinates['id'] if robot.coordinates else 'none yet (run localize)'}")
+    cubes.use_profile(colors.load(args.colors))
+    print(f"  {OK} colours: {cubes.PALETTE.name} ({cubes.PALETTE.doc.get('note', '')})")
+    robot.boundary = Boundary.load(calib / "boundary.yaml")
+    print(f"  {OK} safety boundary: " + ", ".join(f"{k} {v * 100:.0f}" for k, v in robot.boundary.margins.items())
+          + f" cm in from the table's edges{'' if robot.boundary.path.exists() else ' (default)'}")
     root.removeHandler(console)  # the report below says it more compactly
     robot.connect(timeout=args.timeout)
-    if not args.sim and len(robot.connected()) < len(robot.arms):
+    if not args.simulator and len(robot.connected()) < len(robot.arms):
         time.sleep(1.5)  # right after a restart the controllers may still be closing the old session
         robot.connect(timeout=args.timeout)
-    if args.sim:
-        sim.add_cameras(rig, absent)
-    elif args.no_cameras:
+    if args.no_cameras:
         rig.errors.update({k: "skipped (--no-cameras)" for k in rig.specs})
     else:
         rig.connect()
@@ -138,12 +124,12 @@ def main(args) -> None:
     url = f"http://127.0.0.1:{args.port}/"
     print(f"\npanel  {url}\napi    {url}docs")
     if not args.no_browser:
-        threading.Timer(1.0, open_browser, [url]).start()
+        threading.Timer(1.0, webbrowser.open, [url]).start()
     from myaloha.topics.manager import TopicManager
     topics = TopicManager(robot, url.rstrip("/"))
     print(f"mcp    {url}mcp\n")
     try:
-        uvicorn.run(create_app(robot, logs, sim=args.sim, topics=topics), host="127.0.0.1", port=args.port,
+        uvicorn.run(create_app(robot, logs, topics=topics), host="127.0.0.1", port=args.port,
                     log_level="warning", timeout_graceful_shutdown=2)  # camera streams never end on their own
     finally:
         topics.stop_all()

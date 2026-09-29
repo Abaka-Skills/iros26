@@ -133,6 +133,12 @@ class Subscription:
         items = list(self.buffer) if self.connected else []
         return min(items, key=lambda m: abs(m["t"] - t)) if items else None
 
+    def around(self, t: float) -> tuple[dict | None, dict | None]:
+        """The results published last before and first after robot time `t` (None where there is none)."""
+        items = list(self.buffer) if self.connected else []
+        return (max((m for m in items if m["t"] <= t), key=lambda m: m["t"], default=None),
+                min((m for m in items if m["t"] > t), key=lambda m: m["t"], default=None))
+
 
 # ---------------- the topic's process ----------------
 

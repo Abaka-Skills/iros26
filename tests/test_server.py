@@ -1,36 +1,25 @@
-"""The API against simulated hardware (myaloha.sim); no rig needed."""
+"""The API against the simulated rig (tests/conftest.py); no rig needed."""
 import logging
 import time
 
 import pytest
-import trossen_arm
 from fastapi.testclient import TestClient
 
-from myaloha import sim
-from myaloha.cameras import CameraRig
-from myaloha.robot import Aloha
 from myaloha.server import LogBuffer, create_app
+from simrig import connect, release, simulated_rig
 
 
 @pytest.fixture
-def client(monkeypatch):
-    monkeypatch.setattr(trossen_arm, "TrossenArmDriver", sim.SimDriver)
-    monkeypatch.setattr(sim.SimDriver, "ABSENT", {"192.168.10.2"})  # leader_right unplugged
+def client():
     logs = LogBuffer()
     root = logging.getLogger("myaloha")
     root.setLevel(logging.INFO)
     root.addHandler(logs)
-    rig = CameraRig()
-    robot = Aloha(cameras=rig)
-    robot.connect(timeout=0.1)
-    sim.add_cameras(rig, absent={"wrist_right"})
-    robot.start_monitor(hz=100)
-    time.sleep(1.2)
-    with TestClient(create_app(robot, logs, sim=True)) as c:
-        yield c
-    robot.stop()
-    time.sleep(0.3)
-    robot.disconnect()
+    with simulated_rig(unplugged=("leader_right", "wrist_right")) as sim:
+        robot = connect(sim.address)
+        with TestClient(create_app(robot, logs)) as c:
+            yield c
+        release(robot)
     root.removeHandler(logs)
 
 
@@ -149,3 +138,13 @@ def test_camera_socket_sends_every_camera_and_switches_kind(client):
             if seen.get("high") == 1 and {"low", "wrist_left"} <= seen.keys():
                 break
     assert seen["high"] == 1 and seen["low"] == 0 and "wrist_right" not in seen  # wrist_right is unplugged
+
+
+def test_safety_boundary_is_set_checked_and_streamed(client):
+    b = client.get("/api/boundary").json()
+    assert set(b["margins"]) == {"up", "down", "left", "right"} and b["box"][1] == pytest.approx(b["table"][1] + b["margins"]["down"])
+    r = client.put("/api/boundary", json={"down": 0.2})
+    assert r.status_code == 200 and r.json()["margins"]["down"] == 0.2
+    assert client.get("/api/status").json()["boundary"]["box"][1] == pytest.approx(b["table"][1] + 0.2)
+    assert client.put("/api/boundary", json={"down": -1}).status_code == 422
+    assert client.put("/api/boundary", json={"sideways": 0.1}).status_code == 422

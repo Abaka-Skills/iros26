@@ -19,8 +19,26 @@
 <div class="panel chip" id="brand"></div>
 <div class="panel chip" id="corner">
   <button class="btn" id="reconnect" hidden></button>
+  <a class="btn" id="pickandplay" href="/pickandplay.html" target="_blank" title="Choose a cube and where it goes (while iros26 runs)" hidden>Pick and place ↗</a>
   <a class="btn" href="/docs" target="_blank" title="Every endpoint the panel uses, interactive">API</a>
   <button class="btn icon" id="theme" title="Light / dark"></button>
+  <button class="btn icon" id="bounds" aria-expanded="false" title="Safety boundary: how far in from the table's edges every planned tool point stays"></button>
+</div>
+
+<!-- the safety boundary: margins in from the table's edges (cm), as seen from the operator; no tool
+     point a mod plans leaves it. Shown on the table while open. -->
+<div class="panel" id="bounds-pop" hidden>
+  <h4>Safety boundary</h4>
+  <div class="bounds-map">
+    <label class="in up"><input data-side="up" inputmode="decimal" aria-label="Far edge margin"><u>cm</u></label>
+    <label class="in left"><input data-side="left" inputmode="decimal" aria-label="Left edge margin"><u>cm</u></label>
+    <div class="bounds-table"><div class="bounds-box"></div></div>
+    <label class="in right"><input data-side="right" inputmode="decimal" aria-label="Right edge margin"><u>cm</u></label>
+    <label class="in down"><input data-side="down" inputmode="decimal" aria-label="Near edge margin"><u>cm</u></label>
+  </div>
+  <p class="sub">In from each edge of the table, seen from the operator (up: the far edge). No tool point a mod plans leaves the box; a pick or a target outside it is refused.</p>
+  <p class="bounds-err" id="bounds-err" hidden></p>
+  <div class="actions"><button class="btn" id="bounds-cancel">Cancel</button><button class="btn run" id="bounds-apply">Apply</button></div>
 </div>
 
 <!-- Emergency stop: always on top, triggers on press (not release), also on Space. -->
@@ -53,7 +71,12 @@
   <button class="btn icon" data-view="top" title="Top view (R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M12 8.6v6.8M8.6 12h6.8"/></svg></button>
   <button class="btn icon" data-view="front" title="Front view (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="9.5" rx="1.6"/><path d="M2.5 20h19"/></svg></button>
   <span class="vsep"></span>
-  <button class="btn" data-view="drape" title="Project the top camera's pixels onto the table plane (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 13l12 4-6 4z"/><path d="M12 3v7"/><path d="m9 7 3 3 3-3"/></svg>Table</button>
+  <span class="annos"><button class="btn" data-view="annos" aria-expanded="false" title="Annotations on the table (A)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 13l12 4-6 4z"/><path d="M8 5h11M8 9h7"/><path d="M4.5 5h.01M4.5 9h.01"/></svg>Annos</button>
+    <span class="annos-menu" id="annos" hidden>
+      <label title="Project the top camera's pixels onto the table plane (T)"><input type="checkbox" data-anno="table">Table<span class="sub">top camera on it</span></label>
+      <label title="A 3 cm grid square to W"><input type="checkbox" data-anno="grid">Grid<span class="sub">3 cm</span></label>
+      <label title="Where each follower can pick or place"><input type="checkbox" data-anno="reach">Reach<span class="sub">each arm</span></label>
+    </span></span>
   <button class="btn" data-view="free" title="Free camera: drag to orbit, scroll to zoom, right-drag to pan, double-click to reset (V)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>Free</button>
 </div>
 

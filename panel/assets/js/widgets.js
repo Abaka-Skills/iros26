@@ -31,6 +31,7 @@ const ICON = {
   octagon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.2 2.5h7.6l5.7 5.7v7.6l-5.7 5.7H8.2l-5.7-5.7V8.2z"/><path d="M7 12h10" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/></svg>',
   restart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg>',
+  fence: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><rect x="6.5" y="8.5" width="11" height="7" rx="1" stroke-dasharray="2.2 2.4"/></svg>',
   plug: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>',
 };
 export const icon = k => ICON[k];
@@ -40,11 +41,23 @@ export const active = S => S?.mods?.[S.mods.length - 1] || null;
 const secs = t => t < 10 ? t.toFixed(1) + ' s' : t < 90 ? t.toFixed(0) + ' s' : (t / 60).toFixed(1) + ' min';
 const categories = () => [...new Set(Object.values(ctx.mods).map(m => m.category))];
 
-/* the longest path from idle through the mod's own transitions, then done */
+/* the longest path from idle through the mod's own transitions, then done. A transition back to an
+   earlier state is a retry loop: its state is left out of the line and listed in `loops` */
 function mainPath(tr) {
-  const memo = {};
-  const longest = s => memo[s] ??= [s, ...(tr[s] || []).map(longest).reduce((a, b) => (b.length > a.length ? b : a), [])];
-  return [...longest('idle'), 'done'];
+  const back = [], seen = {};
+  const visit = s => {
+    seen[s] = 'open';
+    for (const n of tr[s] || []) {
+      if (seen[n] === 'open') back.push([s, n]);
+      else if (!seen[n]) visit(n);
+    }
+    seen[s] = 'done';
+  };
+  visit('idle');
+  const retry = new Set(back.map(([s]) => s)), memo = {};
+  const longest = s => memo[s] ??= [s, ...(tr[s] || []).filter(n => !retry.has(n))
+    .map(longest).reduce((a, b) => (b.length > a.length ? b : a), [])];
+  return { path: [...longest('idle'), 'done'], loops: back };
 }
 
 /* seconds spent in each visited state; the current one is still counting (server clock `now`) */
@@ -92,10 +105,11 @@ export function modList(S, ui) {
 }
 
 /* ---------------- dock: the selected mod ---------------- */
-const UNIT = { duration_s: 's', stage_time: 's', goal_time: 's', sample_hz: 'Hz' };
+const UNIT = { duration_s: 's', stage_time: 's', goal_time: 's', sample_hz: 'Hz', target_x: 'm', target_y: 'm',
+  speed: 'm/s', lost_s: 's' };
 
-function paramFields(S, m, running) {
-  const values = running ? active(S).params : Object.fromEntries(m.params.map(p => [p.name, p.default]));
+function paramFields(S, m, running, last) {
+  const values = running ? active(S).params : { ...Object.fromEntries(m.params.map(p => [p.name, p.default])), ...last };
   const dis = running ? 'disabled' : '';
   return m.params.map(p => {
     const v = values[p.name];
@@ -109,7 +123,7 @@ function paramFields(S, m, running) {
     } else if (p.type === 'bool') {
       input = `<span class="toggles"><button class="${v ? 'on' : ''}" ${dis} data-param="${p.name}" data-bool>${v ? 'on' : 'off'}</button></span>`;
     } else {
-      input = `<label class="in"><input value="${esc(v)}" inputmode="decimal" ${dis} data-param="${p.name}" data-type="${p.type}"><u>${UNIT[p.name] || ''}</u></label>`;
+      input = `<label class="in"><input value="${esc(v)}" ${p.type === 'str' ? '' : 'inputmode="decimal"'} ${dis} data-param="${p.name}" data-type="${p.type}"><u>${UNIT[p.name] || ''}</u></label>`;
     }
     const help = p.help ? `<span class="qhelp" tabindex="0" aria-label="What is ${p.name}?" data-help="${esc(p.help)}" data-figure="${p.figure ?? ''}">?</span>` : '';
     return `<div class="field"><span>${p.name}${help}</span>${input}</div>`;
@@ -124,6 +138,8 @@ export function readParams(root, m) {
       out[p.name] = [...root.querySelectorAll(`button[data-param="${p.name}"].on`)].map(b => b.dataset.val);
     } else if (p.type === 'bool') {
       out[p.name] = root.querySelector(`[data-param="${p.name}"]`).classList.contains('on');
+    } else if (p.type === 'str') {
+      out[p.name] = root.querySelector(`[data-param="${p.name}"]`).value.trim();
     } else {
       out[p.name] = Number(root.querySelector(`[data-param="${p.name}"]`).value);
     }
@@ -131,7 +147,8 @@ export function readParams(root, m) {
   return out;
 }
 
-export function dock(S, name, now) {
+/* `last`: the params of this mod's last run, shown instead of the defaults */
+export function dock(S, name, now, last = null) {
   const m = ctx.mods[name];
   if (!m) return '<div class="now">Waiting for the robot API…</div>';
   const running = active(S)?.name === name;
@@ -142,7 +159,7 @@ export function dock(S, name, now) {
   const needs = r.needs.map(n => `<div class="need"><span class="ntext">${dot(n.met ? 'ok' : 'err')}needs ${esc(n.text)}</span>
       ${n.items.map(i => `<span>${dot(i.ok ? 'ok' : n.met ? 'off' : 'err')}${esc(i.label)}</span>`).join('')}</div>`).join('');
   return `<div class="phead"><div><b>${m.name}</b><span class="sub">${m.category}</span></div><p>${esc(m.doc)}</p>${needs}</div>
-    <div class="params">${paramFields(S, m, running)}${skipped.length && !running ? `<div class="hint">● ${skipped.join('; ')}: skipped</div>` : ''}</div>
+    <div class="params">${paramFields(S, m, running, last)}${skipped.length && !running ? `<div class="hint">● ${skipped.join('; ')}: skipped</div>` : ''}</div>
     ${name === 'localize' ? coordinatesCard() : ''}
     <div><h4>State machine <span class="sub">${running ? 'running' : 'not running'}</span></h4>${fsmTimeline(fsm, now)}</div>`;
 }
@@ -181,6 +198,7 @@ export function actions(S, name, error) {
 /* Level 1: the robot's major states, then the running mod (and its parents) and its state. */
 export function majorStrip(S, link) {
   if (!link) return '<div class="major"><span class="mst down">backend offline</span><span class="sub">reconnecting…</span></div>';
+  if (!S) return '<div class="major"><span class="sub">connecting…</span></div>';   // linked, no state frame yet
   const m = active(S);
   const crumbs = S.mods.map(x => `<span class="crumb">${x.name}</span>`).join('<span class="sep">›</span>');
   const states = ctx.robot?.states ?? {};
@@ -195,12 +213,13 @@ function stateClass(s, m) {
 
 /* Level 2: each state of the mod's own machine, time spent in it, and what the arms do there. */
 function fsmTimeline(m, now) {
-  const path = mainPath(m.transitions), d = durations(m, now);
+  const { path, loops } = mainPath(m.transitions), d = durations(m, now);
   const terminal = ['stopped', 'failed'].includes(m.state) ? m.state : null;
   return `<div class="vsteps">${path.map(s => {
     const c = stateClass(s, m);
     return `<div class="vstep ${c}"><i class="n"></i><div><div class="vrow"><b>${s}</b>${d[s] !== undefined && s !== 'idle' ? `<span class="vt">${secs(d[s])}${c === 'cur' ? ' ●' : ''}</span>` : ''}</div><p>${esc(m.states[s])}</p></div></div>`;
   }).join('')}</div>
+    ${loops.map(([s, to]) => `<div class="term">a try that fails → <span class="${m.state === s ? 'hit' : ''}">${s}</span> → ${to} again</div>`).join('')}
     <div class="term">from any state → <span class="${terminal === 'stopped' ? 'hit' : ''}">stopped</span> · <span class="f">failed</span></div>`;
 }
 
@@ -231,7 +250,14 @@ export const logHead = (S, filter) => {
 };
 export const logKeep = filter => l => filter === 'all' || l.level === filter || l.src === filter
   || (filter === 'error' && l.level === 'critical');
-export const logLine = l => `<div class="ll ${l.level}"><span class="lt">${new Date(l.t * 1000).toTimeString().slice(0, 8)}</span><span class="lv">${{ warning: 'warn', critical: 'crit' }[l.level] ?? l.level}</span><span class="ls">${esc(l.src)}</span><span class="lm">${esc(l.msg)}</span></div>`;
+export const logLine = l => `<div class="ll ${l.level}" data-seq="${l.seq}"><span class="lt">${new Date(l.t * 1000).toTimeString().slice(0, 8)}</span><span class="lv">${{ warning: 'warn', critical: 'crit' }[l.level] ?? l.level}</span><span class="ls">${esc(l.src)}</span><span class="lm">${esc(l.msg)}</span></div>`;
+
+/* the whole record, for the hover card: date and time to the ms, level, full logger, message, traceback */
+export const logDetail = l => {
+  const d = new Date(l.t * 1000), ms = String(d.getMilliseconds()).padStart(3, '0');
+  return `<div class="ldh"><span>${d.toLocaleDateString()} ${d.toTimeString().slice(0, 8)}.${ms}</span><span class="lv ${l.level}">${l.level}</span><span>${esc(l.logger ?? l.src)}</span></div>`
+    + `<pre class="ldm">${esc(l.msg)}</pre>${l.exc ? `<pre class="ldx">${esc(l.exc)}</pre>` : ''}`;
+};
 
 /* ---------------- topics: perception processes the backend runs ---------------- */
 export const hzText = hz => `${hz.toFixed(hz < 10 ? 1 : 0)} Hz`;

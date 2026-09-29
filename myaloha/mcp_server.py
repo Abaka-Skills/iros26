@@ -11,7 +11,6 @@ import inspect
 from dataclasses import fields
 from typing import Annotated
 
-import httpx
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
@@ -135,10 +134,10 @@ def _run_tool(robot, cls):
 
 def _latest_tool(topics, name: str):
     def latest() -> dict:
-        st = topics.status()[name]
-        if not st.get("url"):
-            raise ToolError(f"{name} is {st['state']}; it must be started from the panel")
-        return httpx.get(st["url"] + "/latest", timeout=2.0).json()
+        m = topics.latest(name)
+        if m is None:
+            raise ToolError(f"{name} is {topics.status()[name]['state']}; it must be started from the panel")
+        return m
 
     latest.__name__ = f"{name}_latest"
     return latest

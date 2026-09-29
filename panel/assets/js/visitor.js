@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { STRINGS } from './i18n.js';
 import { loadArms } from './arm.js';
+import { watermarkTexture } from './watermark.js';
 
 /* ============================ 语言 ============================ */
 const DEFAULT_LANG = 'en';                           // 首次访问的默认语言
@@ -207,53 +208,14 @@ if (CFG.robots) {
     .catch(e => console.warn('WidowX 加载失败：', e));
 }
 
-/* 桌下的地面，以及印在上面的水印。取 Abaka logo 的品牌橙与几何无衬线，压到刚好看得见 */
-function watermarkTexture(color) {
-  const lines = WM.lines;
-  const c = document.createElement('canvas');
-  c.width = 2048;
-  c.height = 16;                                     // 先量字，量完才知道该多高
-  const font = px => `800 ${px}px "Futura", "Avenir Next", "Century Gothic", ` +
-                     `"Poppins", "Helvetica Neue", system-ui, sans-serif`;
-  const setup = g => {
-    g.textAlign = 'left';
-    g.textBaseline = 'middle';
-    g.fillStyle = color;
-    try { g.letterSpacing = WM.tracking + 'px'; } catch {}
-  };
-  const pad = 20;                                    // 留边，否则末字母会被画布切掉
-  const avail = c.width - pad * 2;
-
-  let g = c.getContext('2d');
-  setup(g);
-  /* 每行各自缩放到同一宽度：短的字就大，整块像一个标志 */
-  const sizes = lines.map(t => {
-    g.font = font(400);
-    const m = g.measureText(t);
-    return Math.floor(400 * avail / Math.max(m.width, m.actualBoundingBoxRight || 0));
-  });
-  const rows = sizes.map(px => Math.round(px * WM.lineHeight));
-  c.height = rows.reduce((a, b) => a + b, 0);        // 改尺寸会重置 context，要重新设一遍
-  g = c.getContext('2d');
-  setup(g);
-  let y = 0;
-  lines.forEach((t, i) => {
-    g.font = font(sizes[i]);
-    g.fillText(t, pad, y + rows[i] / 2);
-    y += rows[i];
-  });
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
-  return t;
-}
+/* 桌下的地面，以及印在上面的水印（watermark.js） */
 const floorMat = new THREE.MeshBasicMaterial();   // 不透明：否则会排在水印之后把它盖掉
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
 const markMat = new THREE.MeshBasicMaterial({
-  map: watermarkTexture(WM.color), transparent: true,
+  map: watermarkTexture(WM), transparent: true,
   opacity: WM.opacity, depthWrite: false
 });
 const markW = (G.x + 2 * B.marginX) * WM.scale;

@@ -1,0 +1,20 @@
+note: sampled on the overhead camera over the wooden lab table, 2026-09-26 (the simulator's look too)
+balance: tint
+table: [163, 1, 0]
+l_weight: 0.4
+max_dist: 28
+min_chroma: 15
+colors:
+  red: [[120, 61, 36]]
+  orange: [[147, 45, 28]]
+  yellow: [[205, 11, 60]]
+  green: [[105, -21, -14]]
+  blue: [[82, 15, -51]]
+  purple: [[62, 4, -26]]
+others:
+  wood: [[205, 0, -2], [154, 2, 7]]
+  shadow: [[155, 1, -12]]
+  black: [[9, -4, -1]]
+  dark: [[40, 0, 0]]
+  grey: [[100, 0, 0]]
+  ink: [[85, -4, -19]]      # blue-grey ink and blurred black on the tag sheet (not purple)

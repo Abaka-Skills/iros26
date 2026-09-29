@@ -214,7 +214,7 @@ class Localize(Mod):
                            parallel=self.params.parallel_bases)
         coords.draw_matches(views, res, frames / "matches.jpg")
         doc = plain({"id": ts, "created": time.strftime("%Y-%m-%d %H:%M:%S"), "method": "sift_wrist_cameras",
-                     "frames": str(frames.relative_to(ROOT)), "base_distance": self.params.base_distance,
+                     "frames": str(frames.relative_to(ROOT) if frames.is_relative_to(ROOT) else frames), "base_distance": self.params.base_distance,
                      "parallel_bases": self.params.parallel_bases,
                      "T_W_base": res["T_W_base"], "T_W_mount": res["T_W_mount"],
                      "T_right_left": res["T_right_left"], "report": res["report"]})

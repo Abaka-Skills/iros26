@@ -489,11 +489,17 @@ def _bc(x, y, c):
 
 
 def _bc_inv(x, y, c, iters: int = 20):
+    """Solves _bc(xu, yu) = (x, y) by fixed-point iteration. Far outside the field of view (where the
+    lens model means nothing) it diverges to inf and NaN: there the point is left as it is, still
+    outside the image."""
     xu, yu = x, y
-    for _ in range(iters):
+    with np.errstate(over="ignore", invalid="ignore"):
+        for _ in range(iters):
+            fx, fy = _bc(xu, yu, c)
+            xu, yu = xu + (x - fx), yu + (y - fy)
         fx, fy = _bc(xu, yu, c)
-        xu, yu = xu + (x - fx), yu + (y - fy)
-    return xu, yu
+        bad = ~(np.abs(fx - x) + np.abs(fy - y) < 1e-6)            # not converged (NaN included)
+    return np.where(bad, x, xu), np.where(bad, y, yu)
 
 
 def undistort_norm(xd, yd, dist, model: str = "brown_conrady"):

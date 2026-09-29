@@ -15,6 +15,9 @@ export const get = path => fetch('/api' + path, { cache: 'no-store' }).then(ok);
 export const post = (path, body) => fetch('/api' + path, {
   method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
 }).then(ok);
+export const put = (path, body) => fetch('/api' + path, {
+  method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
+}).then(ok);
 
 /* Every camera over one socket: onFrame(key, kind, blob). Returns setKind(key, kind). */
 export function cameras(onFrame, fps = 15) {

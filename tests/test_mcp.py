@@ -1,33 +1,20 @@
-"""The MCP server (in-process client) against simulated hardware: mods are the "do" side, topics
+"""The MCP server (in-process client) against the simulated rig: mods are the "do" side, topics
 the "read" side; an agent can trigger the emergency stop but never release it."""
 import asyncio
 import json
-import time
 
 import pytest
-import trossen_arm
 from mcp.client.client import Client
 
-from myaloha import mcp_server, sim
-from myaloha.cameras import CameraRig
-from myaloha.robot import Aloha
+from myaloha import mcp_server
 from myaloha.topics.manager import TopicManager
+
+pytestmark = pytest.mark.unplugged("leader_left", "leader_right")
 
 
 @pytest.fixture
-def robot(monkeypatch):
-    monkeypatch.setattr(trossen_arm, "TrossenArmDriver", sim.SimDriver)
-    monkeypatch.setattr(sim.SimDriver, "ABSENT", {"192.168.10.2", "192.168.10.3"})   # no leaders
-    rig = CameraRig()
-    r = Aloha(cameras=rig)
-    r.connect(timeout=0.1)
-    sim.add_cameras(rig)
-    r.start_monitor(hz=100)
-    time.sleep(1.2)
-    yield r
-    r.stop()
-    time.sleep(0.3)
-    r.disconnect()
+def robot(sim_robot):
+    return sim_robot[0]
 
 
 def call(robot, steps):

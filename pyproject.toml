@@ -28,7 +28,13 @@ lerobot_teleoperator_trossen = { workspace = true }
 
 [tool.uv.workspace]
 members = ["thirdparty/lerobot_trossen/packages/*"]
+exclude = ["simulator"]   # a project of its own (its own environment and lock)
 
 [tool.pytest.ini_options]
+markers = [
+  "unplugged(*devices): simulator devices (arm or camera names) absent for the test",
+  "cubes(scene): simulator cubes for the test, [{color, x, y, yaw, level}]",
+]
 pythonpath = ["."]
 testpaths = ["tests"]
+filterwarnings = ["ignore:.* encountered in matmul:RuntimeWarning"]   # Accelerate's false alarms (myaloha/__init__.py)

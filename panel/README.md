@@ -7,6 +7,7 @@ one set of meshes (`assets/meshes/wxai/`):
 |---|---|---|
 | `index.html` | **Operator panel**: the rig live in 3D, cameras, mods and their state machines, log | the robot API (`myaloha/server.py`) |
 | `visitor.html` | **Cube Sandbox**: the public page, **https://abaka-skills.github.io/iros26/** | `visitor.json` |
+| `pickandplay.html` | **Pick and place**: click a cube, then where it goes; served only while the `iros26` mod runs | the robot API |
 
 ## Operator panel
 
@@ -14,7 +15,7 @@ Served by the backend, which checks the hardware first:
 
 ```sh
 uv run python -m myaloha panel          # real rig (asks for sudo: the cameras need root)
-uv run python -m myaloha panel --sim    # no hardware
+uv run python -m myaloha panel --simulator 127.0.0.1:8810    # a simulated rig (python -m simulator)
 ```
 
 It is a view over the API and holds no robot state: live state arrives over the

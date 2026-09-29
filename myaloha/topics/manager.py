@@ -81,6 +81,12 @@ class TopicManager:
         p = self.procs.get(name)
         return bool(p and p.popen.poll() is None)
 
+    def latest(self, name: str) -> dict | None:
+        """The topic's newest result ({seq, t, wall, data}), or None if it isn't running."""
+        if not self.running(name):
+            return None
+        return httpx.get(f"http://127.0.0.1:{self.procs[name].port}/latest", timeout=2.0).json()
+
     def requirements(self, name: str) -> dict:
         return evaluate(TOPICS[name].REQUIRES, self.robot)
 

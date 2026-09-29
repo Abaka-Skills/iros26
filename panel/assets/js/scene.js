@@ -4,10 +4,15 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildArm } from './arm.js';
+import { watermarkTexture } from './watermark.js';
 
 const D2R = Math.PI / 180;
 
-export function makeScene(host, cfg, assets, status, themeName, { pixelRatio = Math.min(devicePixelRatio, 2) } = {}) {
+/* leaders: false leaves out the leader arms and their stand (a page for the followers' work only);
+   watermark: {color, opacity, lines, tracking, lineHeight, scale (of the table's width), offset (m from
+   its long edge)} prints ours on the floor, as visitor.html does */
+export function makeScene(host, cfg, assets, status, themeName,
+                          { pixelRatio = Math.min(devicePixelRatio, 2), leaders = true, watermark = null } = {}) {
   const U = cfg.unitsPerMeter, R = cfg.rig;
   const canvas = document.createElement('canvas');
   host.prepend(canvas);
@@ -38,7 +43,7 @@ export function makeScene(host, cfg, assets, status, themeName, { pixelRatio = M
     scene.add(m);
   };
   slab(R.table, mats.board);
-  slab(R.stand, mats.stand);
+  if (leaders) slab(R.stand, mats.stand);
 
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial());
   floor.rotation.x = -Math.PI / 2;
@@ -46,9 +51,31 @@ export function makeScene(host, cfg, assets, status, themeName, { pixelRatio = M
   floor.receiveShadow = true;
   scene.add(floor);
 
+  /* the watermark on the floor, beyond the rig (table and arms) on the side away from the camera (it
+     changes sides as the view turns), reading left to right; framed with the rig */
+  let mark = null;
+  if (watermark) {
+    const tex = watermarkTexture(watermark), w = R.table.w * U * watermark.scale;
+    mark = new THREE.Mesh(new THREE.PlaneGeometry(w, w * tex.image.height / tex.image.width),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: watermark.opacity, depthWrite: false }));
+    mark.rotation.x = -Math.PI / 2;
+    mark.position.y = floor.position.y + 0.005;
+    mark.renderOrder = 1;
+    scene.add(mark);
+  }
+  function placeMark(az, rig) {
+    const a = Math.round(az / (Math.PI / 2)) * Math.PI / 2;  // the camera's side of the table, in 90 deg steps
+    const dx = Math.round(Math.sin(a)), dz = Math.round(Math.cos(a));     // toward it (+z: the operator's side)
+    const edge = dx > 0 ? -rig.min.x : dx < 0 ? rig.max.x : dz > 0 ? -rig.min.z : rig.max.z;   // the far side
+    const out = edge + watermark.offset * U + mark.geometry.parameters.height / 2;
+    mark.position.set(-dx * out, mark.position.y, -dz * out);
+    mark.rotation.z = a;                                      // its top away from the camera
+  }
+
   /* arms */
   const arms = {};
   for (const [name, place] of Object.entries(R.arms)) {
+    if (!leaders && name.startsWith('leader')) continue;
     const holder = new THREE.Group();
     holder.position.set(place.x * U, R.lift * U, place.z * U);
     holder.rotation.y = place.yaw * D2R;
@@ -184,6 +211,71 @@ export function makeScene(host, cfg, assets, status, themeName, { pixelRatio = M
   /* a point in W (metres, z up) as a scene position (units, y up): (x, y, z) -> (x, z, -y) */
   const w2s = ([x, y, z]) => new THREE.Vector3(x * U, z * U, -y * U);
 
+  /* Table annotations: a grid square to W (3 cm), and each follower's reach, a ring about its base
+     (from /api/reach), both kept to the table top. */
+  renderer.localClippingEnabled = true;
+  const onTable = [[1, 0, 0, R.table.w], [-1, 0, 0, R.table.w], [0, 0, 1, R.table.d], [0, 0, -1, R.table.d]]
+    .map(([x, y, z, size]) => new THREE.Plane(new THREE.Vector3(x, y, z), size * U / 2));
+  let grid = null, reach = null;
+  const drop = o => { if (o) { scene.remove(o); o.traverse(c => c.geometry?.dispose()); } return null; };
+  function setGrid(step) {
+    grid = drop(grid);
+    if (!step) return;
+    const hw = R.table.w / 2, hd = R.table.d / 2, pts = [];
+    for (let x = -Math.floor(hw / step) * step; x <= hw + 1e-9; x += step) pts.push(w2s([x, -hd, 0]), w2s([x, hd, 0]));
+    for (let y = -Math.floor(hd / step) * step; y <= hd + 1e-9; y += step) pts.push(w2s([-hw, y, 0]), w2s([hw, y, 0]));
+    grid = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0x2b2621, transparent: true, opacity: 0.28, depthWrite: false }));
+    grid.position.y = 0.003 * U;
+    grid.renderOrder = 2;
+    scene.add(grid);
+  }
+  const REACH_TINT = { left: 0x4e87b0, right: 0xc0703a };
+  /* regions: {side: [{outer: [[x, y], ...], holes: [[[x, y], ...], ...]}]} in W (from the reach map) */
+  function setReach(regions) {
+    reach = drop(reach);
+    if (!regions) return;
+    reach = new THREE.Group();
+    const v2 = pts => pts.map(([x, y]) => new THREE.Vector2(x * U, y * U));
+    for (const [side, parts] of Object.entries(regions)) {
+      for (const { outer, holes } of parts) {
+        const shape = new THREE.Shape(v2(outer));
+        shape.holes = holes.map(h => new THREE.Path(v2(h)));
+        const fill = new THREE.Mesh(new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2),   // W (x, y) -> scene (x, -z)
+          new THREE.MeshBasicMaterial({ color: REACH_TINT[side], transparent: true, opacity: 0.2, depthWrite: false,
+                                        clippingPlanes: onTable, side: THREE.DoubleSide }));
+        fill.position.y = 0.0025 * U;
+        reach.add(fill);
+        for (const loop of [outer, ...holes]) {                        // its edges
+          const edge = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(loop.map(([x, y]) => w2s([x, y, 0.003]))),
+            new THREE.LineBasicMaterial({ color: REACH_TINT[side], transparent: true, opacity: 0.7, clippingPlanes: onTable }));
+          reach.add(edge);
+        }
+      }
+    }
+    reach.renderOrder = 2;
+    scene.add(reach);
+  }
+  /* the safety boundary {table, box} ([x0, y0, x1, y1] in W, m): the band between the table's edges
+     and the box, where no planned tool point goes, shaded; the box outlined */
+  let fence = null;
+  const FENCE = 0xc1261a;
+  function setBoundary(b) {
+    fence = drop(fence);
+    if (!b) return;
+    const rect = ([x0, y0, x1, y1]) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    const shape = new THREE.Shape(rect(b.table).map(([x, y]) => new THREE.Vector2(x * U, y * U)));
+    shape.holes = [new THREE.Path(rect(b.box).map(([x, y]) => new THREE.Vector2(x * U, y * U)))];
+    const band = new THREE.Mesh(new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2),   // W (x, y) -> scene (x, -z)
+      new THREE.MeshBasicMaterial({ color: FENCE, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide }));
+    band.position.y = 0.0028 * U;
+    const edge = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(rect(b.box).map(([x, y]) => w2s([x, y, 0.0032]))),
+      new THREE.LineBasicMaterial({ color: FENCE, transparent: true, opacity: 0.85 }));
+    fence = new THREE.Group().add(band, edge);
+    fence.renderOrder = 3;
+    scene.add(fence);
+  }
+
   /* Topic overlays. Cubes (locate_cubes) in clay, in the sandbox's colours; a cube hidden under
      a stack (no colour known) is translucent grey. W -> scene: (x, y, z) -> (x, z, -y). */
   const cubeGroup = new THREE.Group(), cubeMats = {};
@@ -202,8 +294,143 @@ export function makeScene(host, cfg, assets, status, themeName, { pixelRatio = M
       m.position.copy(w2s([c.x, c.y, c.z]));
       m.rotation.y = (c.yaw ?? 0) * D2R;
       m.castShadow = m.receiveShadow = c.visible;
+      m.userData.cube = c;
       cubeGroup.add(m);
     }
+    applyHover();
+    applyMarks();
+  }
+  /* Hover: edges in a darker shade of its colour on the cube under the pointer; hoveredCube() gives the cube and where to
+     label it. Followed by track id, so they stay on the cube as locate_cubes updates. */
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  const edgeFrame = () => {
+    const frame = new THREE.Group();
+    const t = CUBE.size * U * 0.06, a = CUBE.size * U * 0.48 + t / 3;   // edge thickness; on the cube's edges
+    const mat = new THREE.MeshBasicMaterial();
+    for (const axis of [0, 1, 2]) for (const s1 of [-1, 1]) for (const s2 of [-1, 1]) {
+      const size = [t, t, t], pos = [0, 0, 0];
+      size[axis] = 2 * a + t;
+      const [i, j] = [0, 1, 2].filter(k => k !== axis);
+      pos[i] = s1 * a; pos[j] = s2 * a;
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(...size), mat);
+      bar.position.set(...pos);
+      frame.add(bar);
+    }
+    frame.visible = false;
+    scene.add(frame);
+    return frame;
+  };
+  const hoverFrame = edgeFrame();
+  let hoverTrack = null;
+  const meshOf = track => cubeGroup.children.find(m => m.userData.cube.track === track);
+  const hoveredMesh = () => meshOf(hoverTrack);
+  function applyHover() {
+    const m = hoveredMesh();
+    hoverFrame.visible = !!m;
+    if (!m) return;
+    hoverFrame.position.copy(m.position);
+    hoverFrame.rotation.copy(m.rotation);
+    hoverFrame.children[0].material.color.copy(m.material.color).multiplyScalar(0.45);
+  }
+  function hover(track) {
+    if (track === hoverTrack) return;
+    hoverTrack = track;
+    applyHover();
+    render();
+  }
+  function hoveredCube() {
+    const m = hoveredMesh();
+    return m && { cube: m.userData.cube, ...projectPoint(m.position.clone().setY(m.position.y + CUBE.size * U).toArray()) };
+  }
+  /* Choosing on the rig (pickandplay.html): pick(x, y) gives what is under a client point, a cube
+     ({cube}) or a point on the table top ({point: [x, y]} in W), else null. setMarks frames the
+     chosen cube (followed by track id) and shows a ghost cube where it goes, square to W as
+     pick_place sets it down. */
+  const tablePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  function cubeAt(clientX, clientY) {             // the cube mesh under a client point; leaves `ray` cast there
+    const r = canvas.getBoundingClientRect();
+    ndc.set((clientX - r.left) / r.width * 2 - 1, 1 - (clientY - r.top) / r.height * 2);
+    ray.setFromCamera(ndc, cam);
+    return ray.intersectObjects(cubeGroup.children, false)[0]?.object;
+  }
+  function pick(clientX, clientY) {
+    const hit = cubeAt(clientX, clientY);
+    if (hit) return { cube: hit.userData.cube };
+    const p = ray.ray.intersectPlane(tablePlane, new THREE.Vector3());
+    if (!p) return null;
+    const x = p.x / U, y = -p.z / U;
+    return Math.abs(x) <= R.table.w / 2 && Math.abs(y + R.table.z) <= R.table.d / 2 ? { point: [x, y] } : null;
+  }
+  const chosenFrame = edgeFrame();
+  chosenFrame.children[0].material.color.set(0x2b2621);
+  const ghost = new THREE.Mesh(cubeGeo, new THREE.MeshPhysicalMaterial({ roughness: 1, transparent: true, opacity: 0.5, depthWrite: false }));
+  ghost.visible = false;
+  scene.add(ghost);
+  let markTrack = null;
+  function applyMarks() {
+    const m = meshOf(markTrack);
+    chosenFrame.visible = !!m;
+    if (m) {
+      chosenFrame.position.copy(m.position);
+      chosenFrame.rotation.copy(m.rotation);
+    }
+    layArrow(m);
+  }
+  /* From the chosen cube to where it goes: an arc over the table (a faint tube), arrowheads flowing
+     along it toward the target, in the cube's colour; animated only while it shows. */
+  const ARROW_HEADS = 6, ARROW_PERIOD = 1.6, UP = new THREE.Vector3(0, 1, 0), S0 = CUBE.size * U;
+  const arrow = new THREE.Group();
+  arrow.visible = false;
+  scene.add(arrow);
+  const arrowTube = new THREE.Mesh(new THREE.BufferGeometry(),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.55, depthWrite: false }));
+  const headGeo = new THREE.ConeGeometry(0.42 * S0, 0.9 * S0, 16);
+  const heads = Array.from({ length: ARROW_HEADS }, () =>
+    new THREE.Mesh(headGeo, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false })));
+  arrow.add(arrowTube, ...heads);
+  let arrowCurve = null, arrowKey = '', arrowRaf = 0;
+  let markFrom = null;                             // W point the arrow starts at when the chosen cube isn't seen
+  function layArrow(m) {
+    const base = m ? m.position.clone() : markFrom && w2s([markFrom.x, markFrom.y, markFrom.z]);
+    const from = base && base.setY(base.y + S0 / 2);
+    const to = ghost.visible && ghost.position.clone().setY(ghost.position.y + S0 / 2);
+    arrow.visible = !!(from && to && from.distanceTo(to) > S0);
+    if (!arrow.visible) return;
+    const key = JSON.stringify([from, to, ghost.material.color.getHex()]);
+    if (key !== arrowKey) {                        // re-laid only when an end moves
+      arrowKey = key;
+      const mid = from.clone().lerp(to, 0.5);
+      mid.y += Math.max(2 * S0, 0.35 * from.distanceTo(to));
+      arrowCurve = new THREE.QuadraticBezierCurve3(from, mid, to);
+      arrowTube.geometry.dispose();
+      arrowTube.geometry = new THREE.TubeGeometry(arrowCurve, 48, 0.12 * S0, 8, false);
+      [arrowTube, ...heads].forEach(o => o.material.color.copy(ghost.material.color).multiplyScalar(0.8));
+    }
+    if (!arrowRaf) arrowRaf = requestAnimationFrame(flowArrow);
+  }
+  function flowArrow(t) {
+    if (!arrow.visible) { arrowRaf = 0; render(); return; }
+    const phase = (t / 1000 / ARROW_PERIOD) % 1;
+    heads.forEach((h, i) => {
+      const u = (i / ARROW_HEADS + phase) % 1;
+      h.position.copy(arrowCurve.getPointAt(u));
+      h.quaternion.setFromUnitVectors(UP, arrowCurve.getTangentAt(u));
+      h.material.opacity = Math.sqrt(Math.sin(Math.PI * u));         // in at the cube, out at the target
+    });
+    render();
+    arrowRaf = requestAnimationFrame(flowArrow);
+  }
+  /* track: the chosen cube's id, or null; target: {x, y, z, color} (W, the cube's centre there), or null;
+     from: {x, y, z} (W) where the arrow starts while that cube isn't seen (carried), or null */
+  function setMarks({ track = null, target = null, from = null } = {}) {
+    markTrack = track;
+    markFrom = from;
+    ghost.visible = !!target;
+    if (target) {
+      ghost.position.copy(w2s([target.x, target.y, target.z]));
+      ghost.material.color.set(CUBE.colors[target.color] ?? CUBE.hidden);
+    }
+    applyMarks();
   }
   /* Cameras (cam_params): a small frustum glyph at each camera's pose (tinted image plane, a tick
      on its top edge), depth-tested like the rig. Labels come from cameraTips(). */
@@ -320,7 +547,8 @@ export function makeScene(host, cfg, assets, status, themeName, { pixelRatio = M
     const box = new THREE.Box3();
     Object.values(arms).forEach(a => box.expandByObject(a.holder));
     box.expandByPoint(new THREE.Vector3(-R.table.w * U / 2, 0, -R.table.d * U / 2));
-    box.expandByPoint(new THREE.Vector3(R.table.w * U / 2, 0, R.stand.z * U + R.stand.d * U / 2));
+    box.expandByPoint(new THREE.Vector3(R.table.w * U / 2, 0, leaders ? R.stand.z * U + R.stand.d * U / 2 : R.table.d * U / 2));
+    if (mark) { placeMark(az, box.clone()); box.expandByObject(mark); }
     const c = box.getCenter(new THREE.Vector3());
     cam.position.copy(c).add(new THREE.Vector3(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).multiplyScalar(160));
     cam.lookAt(c);
@@ -343,8 +571,8 @@ export function makeScene(host, cfg, assets, status, themeName, { pixelRatio = M
 
   function render() { renderer.render(scene, cam); host.dispatchEvent(new Event('rendered')); }
 
-  /* Free camera on the canvas: drag orbits, right- or shift-drag pans, wheel zooms, double-click
-     returns home. Off by default so a stray drag can't swing the view. */
+  /* Free camera on the canvas: drag orbits, right- or shift-drag pans, wheel or pinch zooms,
+     two-finger scroll pans, double-click returns home. Off by default so a stray drag can't swing the view. */
   let free = false, drag = null;
   const MIN_EL = 3 * D2R, MAX_EL = 88 * D2R;
   canvas.addEventListener('pointerdown', e => {
@@ -366,14 +594,24 @@ export function makeScene(host, cfg, assets, status, themeName, { pixelRatio = M
     frame();
     host.dispatchEvent(new Event('viewchange'));
   });
+  canvas.addEventListener('pointermove', e => {
+    if (drag) return;
+    hover(cubeAt(e.clientX, e.clientY)?.userData.cube.track ?? null);
+  });
+  canvas.addEventListener('pointerleave', () => hover(null));
   const endDrag = () => { drag = null; canvas.style.cursor = free ? 'grab' : ''; };
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('contextmenu', e => { if (free) e.preventDefault(); });
+  /* a mouse wheel zooms, and so does a trackpad pinch (it comes as a wheel with ctrl); a trackpad's
+     two-finger scroll pans, the view following the fingers (a trackpad's wheelDeltaY is -3 deltaY, a
+     wheel's steps of 120; unsure, it zooms as before) */
   canvas.addEventListener('wheel', e => {
     if (!free) return;
     e.preventDefault();
-    zoom = Math.min(3, Math.max(0.15, zoom * Math.exp(e.deltaY * 0.0015)));
+    const twoFinger = !e.ctrlKey && e.deltaMode === 0 && (e.deltaX !== 0 || e.wheelDeltaY === -3 * e.deltaY);
+    if (twoFinger) { pan.x += e.deltaX * spp; pan.y -= e.deltaY * spp; }
+    else zoom = Math.min(3, Math.max(0.15, zoom * Math.exp(e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))));
     frame();
     host.dispatchEvent(new Event('viewchange'));
   }, { passive: false });
@@ -397,10 +635,13 @@ export function makeScene(host, cfg, assets, status, themeName, { pixelRatio = M
   return {
     setTheme, update: s => { setStatus(s); render(); }, project, projectPoint, axisTips, setView, viewState, setFree,
     setDrape: cal => { setDrape(cal); render(); }, setDrapeImage: b => { setDrapeImage(b); render(); },
+    setGrid: step => { setGrid(step); render(); }, setReach: r => { setReach(r); render(); },
+    setBoundary: b => { setBoundary(b); render(); },
     setCoordinates: doc => { setCoordinates(doc); render(); },
     /* overlays change the scene only; the next status frame (~30 Hz) draws them, so a fast
        topic stream can't add renders of its own */
-    setCubes, setFrusta, cameraTips,
+    setCubes, setFrusta, cameraTips, hoveredCube, pick,
+    setMarks: marks => { setMarks(marks); render(); },
     setInsets(i) { insets = { ...insets, ...i }; frame(); },
     get arms() { return arms; },
   };

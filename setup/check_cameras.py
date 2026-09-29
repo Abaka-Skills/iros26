@@ -1,6 +1,7 @@
 """Open every RealSense camera, grab one color + depth frame each, save them as PNGs.
 
-librealsense on macOS needs root to claim the cameras:
+librealsense on macOS needs root to claim the cameras, and only one process can hold them: stop the
+camera relay first (sudo launchctl bootout system/com.myaloha.camrelay), then
   cd ~/Downloads/ALOHA && sudo .venv/bin/python setup/check_cameras.py
 """
 import os
@@ -12,8 +13,8 @@ import cv2
 import numpy as np
 import pyrealsense2 as rs
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
-from myaloha.realsense_macos import capture_realsense
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "camrelay", "src"))
+from camrelay.realsense_macos import capture_realsense  # noqa: E402
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "camera_snapshots")
 os.makedirs(OUT, exist_ok=True)

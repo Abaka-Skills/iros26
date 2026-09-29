@@ -36,6 +36,11 @@
     }
   },
   "material": { "bevel": 0.12, "roughness": 0.97, "sheen": 0.5 },
+  "watermark": {
+    "note": "ours, as on visitor.html (visitor.json), printed on the floor by pages that ask for it (pickandplay.html); scale: of the table's width, offset: m beyond its long edge",
+    "color": "#fd5f32", "opacity": 0.5, "scale": 0.45, "offset": 0.05,
+    "lines": ["ABAKA.AI", "IROS 2026", "PITTSBURGH"], "tracking": 10, "lineHeight": 1.02
+  },
   "cubes": {
     "note": "locate_cubes: 2.5 cm cubes, in the Cube Sandbox's colours (visitor.json); hidden = under a stack, colour unknown",
     "size": 0.025,

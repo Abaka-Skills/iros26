@@ -27,7 +27,8 @@ class CamParams(Topic):
     REQUIRES = (Need("a coordinate calibration (run localize)", (("coordinates", "", ("coordinates",)),)),)
     OUTPUT = ("cameras: {key: {K (3x3), dist (k1 k2 p1 p2 k3), model, size [w, h], T_W_cam (4x4, metres) "
               "or null with reason, source: 'localize' (fixed) | 'arm' (wrist, from joints), speed (max joint "
-              "rad/s, wrists)}}; coordinates: calibration id; t: robot clock of the joint reading")
+              "rad/s, wrists)}}; grippers: {side: {T_W_ee (tool point, 4x4), aperture (finger gap, m)}}; "
+              "coordinates: calibration id; t: robot clock of the joint reading")
 
     def setup(self):
         self.kin, self.T_ee_cam = load_arm_model()
@@ -54,7 +55,7 @@ class CamParams(Topic):
             self.wait("no coordinate calibration; run localize")
             return None
         arms = self.get("/arms")
-        cams, t_arms = {}, []
+        cams, grippers, t_arms = {}, {}, []
         for key in FIXED_CAMERAS:
             reg = (doc.get("cameras") or {}).get(key)
             if reg:
@@ -75,9 +76,14 @@ class CamParams(Topic):
                 entry["reason"] = f"{arm_name} not connected"
             else:
                 q = np.array(a["pos"][:6])
-                T = np.array(doc["T_W_mount"][side]) @ self.kin.fk(q) @ self.T_ee_cam[side]
+                fk = self.kin.fk(q)
+                T = np.array(doc["T_W_mount"][side]) @ fk @ self.T_ee_cam[side]
+                # the tool point in the frame mods command in (localize's T_W_base: sag at work poses)
+                grippers[side] = {"T_W_ee": np.round(np.array(doc["T_W_base"][side]) @ fk, 5).tolist(),
+                                  "aperture": round(2 * a["pos"][6], 4)}
                 entry.update({"T_W_cam": np.round(T, 6).tolist(), "t": a["t"],
                               "speed": round(float(np.max(np.abs(a["vel"][:6]))), 4)})
                 t_arms.append(a["t"])
             cams[key] = entry
-        return {"t": max(t_arms) if t_arms else time.perf_counter(), "coordinates": doc["id"], "cameras": cams}
+        return {"t": max(t_arms) if t_arms else time.perf_counter(), "coordinates": doc["id"], "cameras": cams,
+                "grippers": grippers}
