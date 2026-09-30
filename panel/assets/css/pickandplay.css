@@ -28,3 +28,16 @@
 .round .e{grid-column:2;color:var(--muted);font-size:11.5px;line-height:1.35;overflow-wrap:anywhere}
 .ended{font-size:12.5px;line-height:1.5}
 .ended a{color:var(--accent)}
+#autobar{left:18px;bottom:18px;height:44px;padding:0 12px 0 4px;gap:8px}
+#autobar .btn{height:34px}
+#autobar .btn[aria-pressed="true"]{background:var(--ink);color:var(--page)}
+#auto-note{font-variant-numeric:tabular-nums}
+/* the auto countdown: the Pick and place button fills up until the auto round starts */
+#go{position:relative;overflow:hidden;isolation:isolate;flex:1.6;padding:0 12px}   /* wider than Clear: icon, label and countdown */
+#go svg{flex:none}
+#go.counting::before{content:"";position:absolute;inset:0 auto 0 0;width:calc(var(--auto) * 100%);z-index:-1;
+  background:var(--accent);transition:width .25s linear}
+#go.counting[disabled]{opacity:.7}
+#go .lbl{display:inline-flex;flex-direction:column;align-items:flex-start;line-height:1.15}
+#go .auto-in{font-size:10.5px;font-weight:500;opacity:.85;font-variant-numeric:tabular-nums}
+#go .auto-in:empty{display:none}

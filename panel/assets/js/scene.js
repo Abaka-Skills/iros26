@@ -493,7 +493,8 @@ export function makeScene(host, cfg, assets, status, themeName,
   function viewState() {
     const turned = Math.abs(nearest(HOME_AZ, goal.az) - goal.az) > 1e-6 || Math.abs(nearest(goal.az, HOME_AZ) - HOME_AZ) > 1e-6;
     const moved = zoom !== 1 || pan.x || pan.y;
-    return { home: !turned && !moved && goal.el === EL.home, top: goal.el === EL.top, front: goal.el === EL.front, free };
+    return { home: !turned && !moved && goal.el === EL.home, top: goal.el === EL.top, front: goal.el === EL.front,
+      rotate: free === 'rotate', drag: free === 'drag' };
   }
   function setView(action) {
     if (action === 'left') goal.az -= Math.PI / 2;
@@ -571,13 +572,14 @@ export function makeScene(host, cfg, assets, status, themeName,
 
   function render() { renderer.render(scene, cam); host.dispatchEvent(new Event('rendered')); }
 
-  /* Free camera on the canvas: drag orbits, right- or shift-drag pans, wheel or pinch zooms,
-     two-finger scroll pans, double-click returns home. Off by default so a stray drag can't swing the view. */
+  /* Free camera on the canvas, in one of two modes: 'rotate' (drag orbits) or 'drag' (drag pans); in
+     either, right- or shift-drag pans, wheel or pinch zooms, two-finger scroll pans, double-click returns
+     home. Off by default so a stray drag can't swing the view. */
   let free = false, drag = null;
   const MIN_EL = 3 * D2R, MAX_EL = 88 * D2R;
   canvas.addEventListener('pointerdown', e => {
     if (!free) return;
-    drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey };
+    drag = { x: e.clientX, y: e.clientY, pan: free === 'drag' || e.button === 2 || e.shiftKey };
     canvas.setPointerCapture(e.pointerId);
     canvas.style.cursor = drag.pan ? 'move' : 'grabbing';
   });
@@ -616,7 +618,7 @@ export function makeScene(host, cfg, assets, status, themeName,
     host.dispatchEvent(new Event('viewchange'));
   }, { passive: false });
   canvas.addEventListener('dblclick', () => { if (free) { setView('home'); host.dispatchEvent(new Event('viewchange')); } });
-  function setFree(on) { free = on; canvas.style.cursor = on ? 'grab' : ''; return viewState(); }
+  function setFree(mode) { free = mode; canvas.style.cursor = mode ? 'grab' : ''; return viewState(); }   // false | 'rotate' | 'drag'
 
   /* screen position (px, relative to host) just above an arm's highest point */
   function project(name) {

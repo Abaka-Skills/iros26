@@ -27,7 +27,7 @@
   <button class="btn" id="estop-reset">Reset</button>
 </div>
 
-<!-- 3-D view: 90 deg turns, presets, and a free mode (drag / scroll / right-drag on the rig) -->
+<!-- 3-D view: 90 deg turns, presets, and free rotate / free drag (drag / scroll / right-drag on the rig) -->
 <div class="panel chip" id="views">
   <button class="btn icon" data-view="left" title="Turn the view left 90° (Q)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></button>
   <button class="btn icon" data-view="right" title="Turn the view right 90° (E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></button>
@@ -35,10 +35,17 @@
   <button class="btn icon" data-view="top" title="Top view (R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M12 8.6v6.8M8.6 12h6.8"/></svg></button>
   <button class="btn icon" data-view="front" title="Front view (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="9.5" rx="1.6"/><path d="M2.5 20h19"/></svg></button>
   <span class="vsep"></span>
-  <button class="btn" data-view="free" title="Free camera: drag to orbit, scroll to zoom, right-drag to pan, double-click to reset (V)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>Free</button>
+  <button class="btn icon" data-view="rotate" title="Free rotate: drag to orbit, scroll to zoom, right-drag to pan, double-click to reset (V)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16.466 7.5C15.643 4.237 13.952 2 12 2 9.239 2 7 6.477 7 12s2.239 10 5 10c.342 0 .677-.069 1-.2"/><path d="m15.194 13.707 3.814 1.86-1.86 3.814"/><path d="M19 15.57c-1.804.885-4.274 1.43-7 1.43-5.523 0-10-2.239-10-5s4.477-5 10-5c4.838 0 8.873 1.718 9.8 4"/></svg></button>
+  <button class="btn icon" data-view="drag" title="Free drag: drag to pan, scroll to zoom, double-click to reset (G)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg></button>
 </div>
 
 <div class="panel" id="card"></div>
+
+<!-- auto: on, a round starts after 60 s without a mouse event, the next 20 s after it ends -->
+<div class="panel chip" id="autobar">
+  <button class="btn" id="auto" aria-pressed="false" title="Auto: when no one has used the page for 60 s, move a random cube to the other arm's side (a handover), then another every 20 s until someone does">Auto</button>
+  <span class="sub" id="auto-note"></span>
+</div>
 
 <script type="module" src="assets/js/pickandplay.js"></script>
 </body>

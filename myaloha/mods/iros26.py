@@ -14,7 +14,8 @@ class Iros26(Mod):
     """Interactive pick and place: while it runs, /pickandplay.html is served, where the operator
     chooses a cube and then where to put it (on the table, or on another cube). Each choice is
     carried out by pick_place, then the next one is awaited, until stopped. A choice that fails is
-    reported on the page and the next can follow."""
+    reported on the page and the next can follow. The page can also ask for an auto round (when no one
+    has used it for a while): a random cube, handed over to a random free place in the other arm's reach."""
 
     name = "iros26"
     category = "manipulation"
@@ -29,7 +30,7 @@ class Iros26(Mod):
 
     STATES = {
         "idle": "not started",
-        "waiting": "waiting for a cube and a target, chosen on /pickandplay.html",
+        "waiting": "waiting for a cube and a target, chosen on /pickandplay.html (or an auto round)",
         "moving": "pick_place moves the chosen cube to the target",
     }
     TRANSITIONS = {
@@ -42,18 +43,24 @@ class Iros26(Mod):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.choice: dict | None = None        # the one being carried out: {track, target_x, target_y}
+        self.choice: dict | None = None        # the one being carried out: {track, target_x, target_y}, or {auto}
         self.rounds: list[dict] = []           # every choice so far, with how it ended
         self._chosen = threading.Event()
         self._lock = threading.Lock()
 
     def input(self, data: dict) -> dict:
-        """A choice from the page: {track, target_x, target_y}; taken only while waiting."""
-        try:
-            choice = {"track": int(data["track"]), "target_x": float(data["target_x"]),
-                      "target_y": float(data["target_y"])}
-        except (KeyError, TypeError, ValueError):
-            raise ValueError("a choice is {track, target_x, target_y}") from None
+        """A choice from the page: {track, target_x, target_y}, or {auto: true} (pick_place chooses a cube
+        and a place across, for a handover); taken only while waiting."""
+        if data.get("auto") is True:
+            if not self.params.handover:
+                raise ValueError("an auto round hands the cube over: run iros26 with handover on")
+            choice = {"auto": True}
+        else:
+            try:
+                choice = {"track": int(data["track"]), "target_x": float(data["target_x"]),
+                          "target_y": float(data["target_y"])}
+            except (KeyError, TypeError, ValueError):
+                raise ValueError("a choice is {track, target_x, target_y}, or {auto: true}") from None
         with self._lock:
             if self.state != "waiting" or self._chosen.is_set():
                 raise RuntimeError(f"iros26 is {self.state}, not waiting for a choice")
@@ -69,12 +76,17 @@ class Iros26(Mod):
                 if not self.sleep(0.1):
                     return
             self.goto("moving")
-            child = PickPlace(self.robot, PickPlace.Params(**self.choice, arm=p.arm, speed=p.speed, tries=p.tries,
+            auto = self.choice.get("auto", False)
+            what = {"auto_target": True, "across": True, "rounds": 1} if auto else self.choice
+            child = PickPlace(self.robot, PickPlace.Params(**what, arm=p.arm, speed=p.speed, tries=p.tries,
                                                            handover=p.handover, dry_run=p.dry_run), parent=self)
             try:
                 result = child.run()
             except RequirementError as e:          # e.g. locate_cubes stopped meanwhile: this choice only
                 result, child.error = "failed", str(e)
+            if auto:                               # what it chose (track None: nothing could be planned)
+                c = child.params
+                self.choice.update(track=c.track or None, target_x=c.target_x, target_y=c.target_y)
             with self._lock:
                 self.rounds.append({**self.choice, "result": result, "error": child.error})
                 self.choice = None

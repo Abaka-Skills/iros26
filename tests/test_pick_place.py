@@ -284,6 +284,53 @@ def test_iros26_serves_its_page_and_carries_out_a_choice_from_it(rig):
     assert api.get("/pickandplay.html").status_code == 404
 
 
+def test_iros26_auto_hands_a_random_cube_over_to_the_other_arms_side(rig):
+    """An auto round, as the page asks for one when no one has used it for a while: pick_place chooses
+    the cube and a free place only the other arm reaches, so the cube is handed over. Refused when
+    iros26 runs without handover."""
+    robot, sim = rig
+    sim.spawn([CUBE])                                    # on the left arm's side
+    time.sleep(3.0)
+    the_cube(robot)
+    api = httpx.Client(base_url=robot.topics.backend, timeout=10)
+
+    def running(name):
+        return next((m for m in api.get("/api/mods/running").json() if m["name"] == name), None)
+
+    def wait(ok, timeout):
+        end = time.monotonic() + timeout
+        while not ok():
+            assert time.monotonic() < end, running("iros26")
+            time.sleep(0.2)
+
+    assert api.post("/api/mods/iros26/run", json={"params": {"handover": False}}).status_code == 202
+    try:
+        wait(lambda: running("iros26")["state"] == "waiting", 5)
+        assert api.post("/api/mods/iros26/input", json={"auto": True}).status_code == 422
+    finally:
+        api.post("/api/stop")
+        wait(lambda: not robot.mods, 30)
+    assert api.post("/api/mods/iros26/run", json={"params": {"speed": 0.1}}).status_code == 202
+    states = set()
+    try:
+        wait(lambda: running("iros26")["state"] == "waiting", 5)
+        assert api.post("/api/mods/iros26/input", json={"auto": True}).status_code == 200
+        end = time.monotonic() + 300
+        while not running("iros26")["rounds"]:
+            assert time.monotonic() < end, running("iros26")
+            states.add((running("pick_place") or {}).get("state"))
+            time.sleep(0.2)
+        (r,) = running("iros26")["rounds"]
+        assert r["result"] == "done" and r["auto"] and r["track"], r
+    finally:
+        api.post("/api/stop")
+        wait(lambda: not robot.mods, 30)
+    assert "handing_over" in states, states
+    cube = next(c for c in sim.truth()["cubes"] if c["color"] == "red")
+    assert cube["held_by"] is None and cube["level"] == 0 and cube["x"] > 0, cube   # now on the right arm's side
+    assert np.hypot(cube["x"] - r["target_x"], cube["y"] - r["target_y"]) < 0.02, (cube, r)
+
+
 def test_a_placed_cube_is_set_down_not_dropped(rig):
     """The fingers let go only once the cube rests on the table (its bottom on it, not above it), and
     open only a little: the cube stays where it was set down, square and flat."""

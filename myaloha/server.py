@@ -338,7 +338,8 @@ def create_app(robot, logs: LogBuffer, topics: TopicManager | None = None) -> Fa
 
     @app.post("/api/mods/{name}/input", tags=["mods"],
               summary="Input for a running interactive mod; iros26 takes {track, target_x, target_y}: the cube "
-                      "(its locate_cubes track) and where to put it (W, m). 409: not running or not waiting "
+                      "(its locate_cubes track) and where to put it (W, m), or {auto: true}: a random cube "
+                      "handed over to the other arm's side. 409: not running or not waiting "
                       "for input; 422: bad input")
     def mod_input(name: str, data: dict = Body(...)):
         mod_or_404(name)

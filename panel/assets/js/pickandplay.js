@@ -2,7 +2,8 @@
    another cube to stack it); "Pick and place" sends the choice to the running mod
    (POST /api/mods/iros26/input), which carries it out with pick_place. Live state comes from the
    /api/stream WebSocket, the cubes from the locate_cubes topic; the page holds only the choice
-   being made. */
+   being made. With Auto on, a page no one has used (no mouse event) for 60 s asks the mod for an auto
+   round (a random cube, handed over to the other arm's side), and another 20 s after each ends. */
 import * as api from './api.js';
 import * as W from './widgets.js';
 import { loadArmAssets } from './arm.js';
@@ -35,6 +36,11 @@ let sent = null;                                 // the choice being carried out
 const iros = () => S?.mods?.find(m => m.name === 'iros26') ?? null;
 const child = () => S?.mods?.find(m => m.name === 'pick_place') ?? null;
 const cubeOf = track => cubes.find(c => c.track === track);
+/* what iros26 carries out: a choice made here, or an auto round's (pick_place's params, once it chose) */
+function doing() {
+  const m = iros()?.choice, p = child()?.params;
+  return m?.auto ? (p?.track ? { auto: true, track: p.track, target_x: p.target_x, target_y: p.target_y } : { auto: true }) : m;
+}
 const choosable = c => !!c && !!c.color && c.level !== null;      // colour known, on the table or a stack
 const xy = (x, y) => `(${x.toFixed(2)}, ${y.toFixed(2)})`;
 const swatch = color => `<i class="sw" style="background:${CFG.cubes.colors[color] ?? CFG.cubes.hidden}"></i>`;
@@ -56,28 +62,28 @@ function clearChoice() { choice.track = null; choice.target = null; }
 const geos = {}, assets = {};
 assets.follower = await loadArmAssets(CFG.robots.dir, CFG.robots.specs.follower, geos);   // no leaders here
 const host = $('scene');
-/* from the far side of the table, facing the arms and the operator, nearly straight down and square to
+/* from the operator's side of the table, facing the arms, nearly straight down and square to
    the table: the cubes are small, and choosing is on the table's plane (never quite 90 deg: straight
    down, the view's roll is undefined) */
-scene = makeScene(host, { ...CFG, camera: { ...CFG.camera, azimuth: 0, elevation: 68, topElevation: 86 } },
+scene = makeScene(host, { ...CFG, camera: { ...CFG.camera, azimuth: 180, elevation: 68, topElevation: 86 } },
   assets, { arms: {} }, theme, { leaders: false, watermark: CFG.watermark });
 scene.setInsets({ l: 0, r: 300, t: 70, b: 70 });
 
-/* view controls, as in the operator panel: 90 deg turns, presets, free (drag orbits, wheel zooms,
-   right-drag pans); free is remembered in this browser */
+/* view controls, as in the operator panel: 90 deg turns, presets, free rotate (drag orbits) or free
+   drag (drag pans), wheel zooms, right-drag pans; the free mode is remembered in this browser */
 const showView = st => document.querySelectorAll('#views [data-view]').forEach(b =>
   b.setAttribute('aria-pressed', String(!!st[b.dataset.view])));
-let freeCam = false;
-try { freeCam = localStorage.getItem('myaloha-pp-freecam') === 'on'; } catch {}
+let freeCam = false;                               // false | 'rotate' | 'drag'
+try { const v = localStorage.getItem('myaloha-pp-freecam'); freeCam = v === 'rotate' || v === 'drag' ? v : false; } catch {}
 showView(scene.setFree(freeCam));
 host.addEventListener('viewchange', () => showView(scene.viewState()));
 function viewAction(k) {
-  if (k !== 'free') { showView(scene.setView(k)); return; }
-  freeCam = !freeCam;
-  try { localStorage.setItem('myaloha-pp-freecam', freeCam ? 'on' : 'off'); } catch {}
+  if (k !== 'rotate' && k !== 'drag') { showView(scene.setView(k)); return; }
+  freeCam = freeCam === k ? false : k;
+  try { localStorage.setItem('myaloha-pp-freecam', freeCam || 'off'); } catch {}
   showView(scene.setFree(freeCam));
 }
-const VIEW_KEYS = { q: 'left', e: 'right', h: 'home', r: 'top', f: 'front', v: 'free' };
+const VIEW_KEYS = { q: 'left', e: 'right', h: 'home', r: 'top', f: 'front', v: 'rotate', g: 'drag' };
 document.addEventListener('keydown', e => {
   const k = VIEW_KEYS[e.key.toLowerCase()];
   if (k && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches('input, textarea')) viewAction(k);
@@ -89,11 +95,11 @@ function marks() {
   let track = choice.track, target = choice.target && { ...centre(choice.target), color: cubeOf(choice.track)?.color };
   let from = null;                                 // where the arrow starts once the cube is in a gripper (untracked)
   if (phase() === 'moving') {
-    const m = iros().choice;
+    const m = doing();
     track = sent?.track ?? m?.track ?? null;
     from = sent?.from ?? null;
     target = sent ? { ...sent.target, color: sent.color }
-      : m && { x: m.target_x, y: m.target_y, z: SIZE / 2, color: cubeOf(m.track)?.color };
+      : m?.track ? { x: m.target_x, y: m.target_y, z: SIZE / 2, color: cubeOf(m.track)?.color } : null;
   }
   const key = JSON.stringify([track, target, from]);
   if (key !== marksKey) { marksKey = key; scene.setMarks({ track, target, from }); }
@@ -153,10 +159,11 @@ function card() {
   const cubesDown = !W.topicLive(S.topics?.locate_cubes);
   let body;
   if (ph === 'moving' || ph === 'starting') {
-    const c = child(), t = sent?.target ?? (m.choice && { x: m.choice.target_x, y: m.choice.target_y });
-    const track = sent?.track ?? m.choice?.track;
+    const c = child(), d = doing(), t = sent?.target ?? (d?.track ? { x: d.target_x, y: d.target_y } : null);
+    const track = sent?.track ?? d?.track;
     body = `<ol class="steps">
-      ${step(1, 'done', 'The cube', '', track !== undefined ? cubeLine(track, sent?.color ?? cubeOf(track)?.color) : '')}
+      ${step(1, 'done', d?.auto ? 'The cube <span class="sub">auto</span>' : 'The cube', d?.auto && !track ? 'Choosing one at random…' : '',
+        track ? cubeLine(track, sent?.color ?? cubeOf(track)?.color) : '')}
       ${step(2, 'done', 'Where it goes', '', t ? `<div class="what">${xy(t.x, t.y)}</div>` : '')}
       ${step(3, 'cur', 'Pick and place', c ? `<b>${c.state}</b> — ${W.esc(c.states[c.state] ?? '')}` : 'starting…')}</ol>
       <div class="actions"><button class="btn stop big" id="stop" title="Stop the arms where they are and end iros26">${W.icon('stop')}Stop</button></div>`;
@@ -168,7 +175,7 @@ function card() {
       ${step(2, t ? 'done' : c ? 'cur' : '', 'Choose where it goes', t ? '' : 'Click the table, or a cube to stack on.', t ? targetLine(t, true) : '')}
       ${step(3, ready ? 'cur' : '', 'Pick and place', 'The arms move it; the cameras check every step.')}</ol>
       <div class="actions"><button class="btn big" id="clear" ${c || t ? '' : 'disabled'}>Clear</button>
-        <button class="btn run big" id="go" ${ready ? '' : 'disabled'}>${W.icon('run')}${sending ? 'Sending…' : 'Pick and place'}</button></div>`;
+        <button class="btn run big" id="go" ${ready ? '' : 'disabled'}>${W.icon('run')}<span class="lbl">${sending ? 'Sending…' : 'Pick and place'}<span class="auto-in"></span></span></button></div>`;
   }
   const hints = (cubesDown ? '<div class="hint err">locate_cubes is not running: start it in the operator panel to see the cubes.</div>' : '')
     + (error ? `<div class="hint err">${W.esc(error)}</div>` : '') + (note ? `<div class="hint">${W.esc(note)}</div>` : '');
@@ -177,8 +184,19 @@ function card() {
 function rounds(list) {
   if (!list?.length) return '';
   return `<div class="rounds"><h4>Done so far <span class="sub">${list.length}</span></h4>${[...list].reverse().map(r =>
-    `<div class="round"><span class="r ${r.result}">${r.result === 'done' ? '✓' : '✗'}</span><span>cube ${r.track} → ${xy(r.target_x, r.target_y)} <span class="sub">${r.result}</span></span>` +
+    `<div class="round"><span class="r ${r.result}">${r.result === 'done' ? '✓' : '✗'}</span><span>${r.track ? `cube ${r.track} → ${xy(r.target_x, r.target_y)}` : 'no cube chosen'} <span class="sub">${r.auto ? 'auto · ' : ''}${r.result}</span></span>` +
     `${r.error ? `<span class="e">${W.esc(r.error)}</span>` : ''}</div>`).join('')}</div>`;
+}
+
+/* the auto countdown on the Pick and place button: a fill that grows until the auto round starts, and
+   the seconds left (set by autoTick; painted again whenever the card is redrawn) */
+const countdown = { on: false, frac: 0, secs: 0 };
+function paintCountdown() {
+  const go = $('go');
+  if (!go) return;
+  go.classList.toggle('counting', countdown.on);
+  go.style.setProperty('--auto', countdown.on ? countdown.frac.toFixed(3) : '0');
+  go.querySelector('.auto-in').textContent = countdown.on ? `auto in ${countdown.secs} s` : '';
 }
 
 /* each region redraws only when what it shows changed (a redraw under the pointer swallows clicks) */
@@ -192,9 +210,9 @@ function draw() {
   $('estop').classList.toggle('on', estopped);
   $('estop-banner').hidden = !estopped;
   const c = choice.track !== null ? cubeOf(choice.track) : null;
-  const key = JSON.stringify([phase(), choice, c && [c.color, xy(c.x, c.y)], sent, sending, error, note, iros()?.rounds,
+  const key = JSON.stringify([phase(), choice, c && [c.color, xy(c.x, c.y)], sent, sending, error, note, iros()?.rounds, doing(),
     iros()?.params, child()?.state, S?.last_run?.rounds, W.topicLive(S?.topics?.locate_cubes)]);
-  if (changed('card', key)) $('card').innerHTML = card();
+  if (changed('card', key)) { $('card').innerHTML = card(); paintCountdown(); }
 }
 
 /* labels: the cube under the pointer, and the target */
@@ -275,6 +293,45 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && phase() === 'choosing') { clearChoice(); note = error = null; marks(); draw(); }
 });
+
+/* ---- auto: on, a round starts once no mouse event came for COLD, the next HOT after an auto round ends;
+   a mouse event makes it COLD again (a round under way goes on: Stop ends it) ---- */
+const COLD = 60e3, HOT = 20e3;
+let autoOn = false, lastAct = Date.now(), lastEnd = 0, endedAuto = false, wasMoving = false;
+try { autoOn = localStorage.getItem('myaloha-pp-auto') === 'on'; } catch {}
+for (const ev of ['pointermove', 'pointerdown', 'wheel'])
+  document.addEventListener(ev, () => { lastAct = Date.now(); }, { capture: true, passive: true });
+async function goAuto() {
+  sending = true; error = note = null;
+  clearChoice(); marks(); draw();
+  try { await api.post('/mods/iros26/input', { auto: true }); }
+  catch (e) { error = `Auto: ${e.message}`; }
+  lastEnd = Date.now(); endedAuto = true;          // HOT before another, sent or refused
+  sending = false;
+  draw();
+}
+function autoTick() {
+  const ph = phase(), now = Date.now();
+  if (wasMoving && ph !== 'moving') { lastEnd = now; endedAuto = !!iros()?.rounds.at(-1)?.auto; }
+  wasMoving = ph === 'moving';
+  const hot = endedAuto && lastEnd > lastAct;
+  const left = (hot ? HOT : COLD) - (now - Math.max(lastAct, lastEnd));
+  if (autoOn && ph === 'choosing' && !sending && left <= 0) goAuto();
+  const span = hot ? HOT : COLD;
+  Object.assign(countdown, { on: autoOn && ph === 'choosing' && !sending,
+    frac: Math.min(1, Math.max(0, 1 - left / span)), secs: Math.max(0, Math.ceil(left / 1000)) });
+  paintCountdown();
+  $('auto').setAttribute('aria-pressed', String(autoOn));
+  $('auto-note').textContent = !autoOn ? 'off' : ph === 'moving' ? (doing()?.auto ? 'moving a cube' : '')
+    : ph !== 'choosing' ? '' : `${hot ? 'next' : 'starts'} in ${Math.max(0, Math.ceil(left / 1000))} s`;
+}
+$('auto').addEventListener('click', () => {
+  autoOn = !autoOn;
+  try { localStorage.setItem('myaloha-pp-auto', autoOn ? 'on' : 'off'); } catch {}
+  autoTick();
+});
+setInterval(autoTick, 250);
+autoTick();
 
 /* ---- live ---- */
 let frame = 0;

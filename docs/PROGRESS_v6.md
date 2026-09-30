@@ -87,7 +87,8 @@ arrangement on the real table.
   cameras missed). It has to last `CONTACT_HOLD` (2) readings, and none count for the first `CONTACT_WARMUP`
   (8, 0.4 s). The surface is measured when the task is planned (`self.support`): by the time the cube hangs
   over the target, the overhead camera reports it as a cube on the table there. pickandplay.html's default
-  view is turned 180 deg (azimuth 0) and a little more oblique (68 deg). And in auto_target, a cube not found
+  view is a little more oblique (68 deg). Both pages' default views are turned 180 deg about z: the
+  operator panel's to azimuth 28 (+y toward the viewer), pickandplay.html's to 180 (-y toward the viewer). And in auto_target, a cube not found
   again after a recovery ends that round (`GaveUp`), not the run.
 - Fixed: the cube could drop just after a handover. The taker went from the meeting point (tool horizontal)
   to above the target (tool down) in one joint move, and on the way the cube swung down to 25 mm (its bottom
@@ -175,6 +176,30 @@ arrangement on the real table.
   the lift lag by up to 37 mm, and with the fusion fixes the spikes were gone anyway. Tests: the low wrist
   over a cube finds it; a vague observation makes no cube alone; a half-covered face is less sure; a
   track keeps its colour over a nearer misread; a far wrist can't drop a track.
+- **Tracking under handover, measured and fixed** (`docs/TRACKING_REPORT.md`). 10 simulated tasks, each
+  needing a handover, are scored against the simulator's truth frame by frame. Before the fixes: 7 of 10 tasks
+  done, the held cube 12 mm off while the other arm took it, missing in about a fifth of the swing and carry
+  frames, 245 ghost track-frames. After: 9 to 10 of 10 done, 7 mm while receiving, 2 to 6% missing, 35 ghosts,
+  resting cubes 4.0 mm (from 5.1).
+  - **Fusion:** vagueness judged on a group of views; far views in the air carry the height's error; views
+    within 1.2 cubes in the air are one cube; far-only columns dropped where a close camera sees table; the far
+    view's side-face parallax taken back ((S/2)·cot(elevation), independent of yaw); the low camera places a
+    cube nothing above can see.
+  - **Tracker:** a track that missed a frame is also tried as stopped where it was last seen; hidden tracks are
+    kept only while resting on something.
+  - **pick_place:** plans the pick again when the track moves 4 mm or more (after staging, and when the wrist
+    can't measure the cube); recovery never closes the gripper.
+  - 8 new unit tests. The remaining colour misreads come from the simulator drawing each cube's albedo again at
+    every spawn (to settle: keep albedos across spawns, or calibrate the `sim` profile over several).
+- **Auto on the pick-and-place page.** An Auto toggle (bottom left, remembered in the browser): with it on,
+  60 s without a mouse event (move, press, wheel) starts an auto round, and 20 s after an auto round ends
+  the next one; any mouse event goes back to the 60 s wait (a round under way goes on). The page sends
+  `{auto: true}` to iros26, which runs pick_place with `auto_target`, `across` (a place no arm that reaches
+  the cube reaches, so every round is a handover) and `rounds=1`; refused when iros26 runs without handover.
+  Checked on the simulator in a browser (60 s, then 20 s after the round) and by a new test.
+  - Seen: 2 of 4 auto rounds ended as failed after a good handover and placement. A target 8 cm from the
+    right base: the cameras didn't see the placed cube there ("nearest 251 mm off"), and `_recover` then
+    found no IK lifting the giver, already at rest.
 
 ## Open
 

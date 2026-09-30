@@ -253,3 +253,109 @@ def test_a_vague_camera_cannot_say_a_cube_is_gone():
     near = look_at([0.10, 0.05, 0.0], [1.0, 0.0], 0.35, np.radians(20))                # closer, and fixed: it can
     fixed = cubes.CameraView("low", *render(near, [], 0.0005), K, np.zeros(5), "brown_conrady", near)
     assert cubes.evidence(fixed, np.array([0.10, 0.05, S / 2])) == "empty"
+
+
+def test_a_slanted_overhead_camera_places_a_cube_without_leaning_toward_itself():
+    """Seen from far at a slant, a cube's blob is its top and the sides facing the camera; placed on
+    the top's plane, it would lean toward the camera by half a cube's sweep (about 5 mm here)."""
+    slant = look_at([0.0, 0.0, 0.0], [0.0, -1.0], 1.0, np.radians(60))
+    scene = [("red", x, y, 0, yaw) for x, y, yaw in ((-0.2, 0.1, 0), (0.0, -0.1, 30), (0.2, 0.15, 60))]
+    found, _ = cubes.locate([view("high", slant, 0.0, scene)])
+    for _, x, y, _, _ in scene:
+        c = min(found, key=lambda c: np.hypot(c["x"] - x, c["y"] - y))
+        assert np.hypot(c["x"] - x, c["y"] - y) < 0.0015, (c, x, y)
+
+
+def air(cam, color, x, y, z, sigma, top=False):
+    return cubes.Obs(cam, cubes.NAMES.index(color), np.array([x, y]), None, top, 400, 0.3, sigma, z=z)
+
+
+def test_two_vague_views_that_agree_place_a_cube_in_the_air():
+    """A held cube seen from the side by two cameras, each too vague alone: together they place it."""
+    assert cubes.fuse([air("low", "red", 0.0, 0.08, 0.17, 0.014)]) == []
+    found = cubes.fuse([air("low", "red", 0.0, 0.08, 0.17, 0.014), air("wrist_left", "red", 0.003, 0.078, 0.172, 0.014)])
+    assert [(c["color"], c["level"]) for c in found] == [("red", None)] and abs(found[0]["z"] - 0.171) < 0.002
+
+
+def test_views_of_one_held_cube_a_little_apart_are_one_cube():
+    """From below, fingers hiding its top edge, the held cube reads lower and another colour: one cube."""
+    found = cubes.fuse([air("wrist_left", "red", 0.0, 0.08, 0.17, 0.008), air("wrist_right", "red", 0.001, 0.08, 0.171, 0.008),
+                        air("low", "orange", 0.002, 0.081, 0.146, 0.012)])
+    assert [(c["color"], c["level"]) for c in found] == [("red", None)], found
+
+
+def test_an_overhead_view_of_a_held_cube_is_not_put_on_the_table_where_a_close_camera_sees_table():
+    """A cube held 17 cm up that only the overhead camera sees: placed on the table it would be a ghost
+    6 cm off. A close camera that sees the table there says it is not on the table."""
+    held = [("red", 0.0, 0.08, 0.17 / S - 0.5, 0)]
+    high = look_at([0.0, 0.0, 0.0], [0.0, -1.0], 1.0, np.radians(60))
+    alone, _ = cubes.locate([view("high", high, 0.0, held)])
+    assert len(alone) == 1 and alone[0]["level"] == 0                      # nothing to tell it isn't on the table
+    ghost = (alone[0]["x"], alone[0]["y"])
+    close = look_at([*ghost, 0.0], [1.0, 0.3], 0.3, np.radians(70))        # over where the ghost would be
+    table = cubes.CameraView("wrist_left", *render(close, [], 0.0005), K, np.zeros(5), "brown_conrady", close, fixed=False)
+    found, _ = cubes.locate([view("high", high, 0.0, held), table])
+    assert found == [], found
+
+
+def test_a_cube_seen_again_after_a_gap_keeps_its_track():
+    """A cube tracked a while, then hidden by the arm; seen again first partly (another colour, 12 mm
+    off), then whole: that jitter reads as ~4 cm/s. Unseen for a second after, the cube is still where
+    it was. It keeps its track, not a new one beside it (which the old one would outlive as a ghost)."""
+    tr = cubes.Tracker()
+    for k in range(10):
+        tr.update([cube("red", 0.243, 0.125)], k * 0.33)
+    tr.update([cube("orange", 0.233, 0.117, confidence=0.9)], 5.0)
+    track = tr.update([cube("red", 0.243, 0.125)], 5.35)[0]["track"]
+    tr.update([], 5.7)
+    tr.update([], 6.0)
+    again = tr.update([cube("red", 0.242, 0.122)], 6.35)
+    assert [c["track"] for c in again] == [track] and len(tr.tracks) == 1, (again, len(tr.tracks))
+
+
+def test_a_lifted_cube_is_followed_without_lag():
+    """Seen every frame, a cube lifted at 5 cm/s is followed as it moves, not held back as if at rest."""
+    tr = cubes.Tracker()
+    out = []
+    for k in range(12):
+        z = S / 2 + max(0, k - 3) * 0.05 * 0.33
+        out = tr.update([{**cube("red", 0.1, 0.05), "z": z, "level": None if k > 3 else 0}], k * 0.33)
+    assert len(out) == 1 and abs(out[0]["z"] - z) < 0.006, (out, z)
+
+
+def test_a_cube_only_the_table_level_camera_sees_is_found_where_nothing_above_can_see():
+    """An arm at rest over a cube hides it from the overhead camera; the low camera sees it. Where the
+    overhead camera sees the spot clearly and finds nothing, the low camera's view alone makes no cube."""
+    scene = [("red", -0.15, 0.05, 0, 0)]
+    low = look_at([-0.15, 0.05, 0.03], [0.0, -1.0], 0.40, np.radians(0.5))
+    covered = view("high", HIGH, 0.0, scene)
+    arm = np.zeros(covered.depth.shape, bool)
+    P = cubes.apply_T(cubes.inv_T(HIGH), np.array([[-0.15, 0.05, S / 2]]))[0]
+    u, v = int(P[0] / P[2] * K[0, 0] + K[0, 2]), int(P[1] / P[2] * K[1, 1] + K[1, 2])
+    arm[v - 25:v + 25, u - 25:u + 25] = True
+    covered.depth[arm] -= 0.4                                                  # the arm, 40 cm nearer
+    covered.color[arm] = 40                                                    # dark, no cube colour
+    far = look_at([-0.15, 0.05, 0.0], [1.0, 0.2], 0.65, np.radians(35))      # the other arm's wrist, too far to place it
+    wrist = cubes.CameraView("wrist_right", *render(far, scene, 0.0005), K, np.zeros(5), "brown_conrady", far, fixed=False)
+    found, _ = cubes.locate([covered, view("low", low, 0.001, scene), wrist])
+    assert [(c["color"], c["level"]) for c in found] == [("red", 0)], found
+    assert np.hypot(found[0]["x"] + 0.15, found[0]["y"] - 0.05) < 0.012, found
+    clear = view("high", HIGH, 0.0, [])                                        # sees the spot, nothing there
+    assert cubes.locate([clear, view("low", low, 0.001, scene)])[0] == []
+
+
+def test_a_cube_in_the_air_is_not_kept_where_it_was_once_hidden():
+    """A cube carried in a gripper, hidden (something in front of it), is not kept in mid-air where it
+    was last seen past hold_s, nor at level 1 with nothing under it (a lifted cube passing that
+    height); a resting cube hidden the same way is, on the table or on another cube."""
+    near = look_at([0.10, 0.05, 0.0], [-1.0, -0.6], 0.45, np.radians(35))
+    covered = view("near", near, 0.001, [])
+    covered.depth[covered.depth > 0] = 0.1                                  # an arm close in front of everything
+    for level, z, under, kept in ((None, 0.06, False, False), (1, 1.5 * S, False, False), (0, S / 2, False, True),
+                                  (1, 1.5 * S, True, True)):
+        tr = cubes.Tracker()
+        c = [{**cube("red", 0.10, 0.05), "level": level, "z": z}] + ([cube("blue", 0.10, 0.05)] if under else [])
+        tr.update(c, 0.0)
+        tr.update(c, 0.3)
+        out = [o for o in tr.update([], 2.0, [covered]) if o["color"] == "red"]
+        assert bool(out) == kept and (not out or out[0]["unseen"] == "occluded"), (level, under, out)

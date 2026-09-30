@@ -329,8 +329,8 @@ const showView = st => document.querySelectorAll('#views [data-view]').forEach(b
   const k = b.dataset.view;
   if (k !== 'annos') b.setAttribute('aria-pressed', String(k in st ? !!st[k] : false));
 });
-let freeCam = false;
-try { freeCam = localStorage.getItem('myaloha-freecam') === 'on'; } catch {}
+let freeCam = false;                               // false | 'rotate' | 'drag'
+try { const v = localStorage.getItem('myaloha-freecam'); freeCam = v === 'rotate' || v === 'drag' ? v : false; } catch {}
 showView(scene.setFree(freeCam));
 host.addEventListener('viewchange', () => showView(scene.viewState()));
 /* top camera draped on the table (its pose from the latest localize run), live frames at ~6 Hz */
@@ -360,13 +360,13 @@ scene.setGrid(annos.grid ? 0.03 : 0);
 function viewAction(k) {
   if (k === 'annos') { toggleAnnosMenu(); return; }
   if (k === 'drape') { if (!drapeBlocked()) setAnno('table', !annos.table); return; }
-  if (k === 'free') {
-    freeCam = !freeCam;
-    try { localStorage.setItem('myaloha-freecam', freeCam ? 'on' : 'off'); } catch {}
+  if (k === 'rotate' || k === 'drag') {
+    freeCam = freeCam === k ? false : k;
+    try { localStorage.setItem('myaloha-freecam', freeCam || 'off'); } catch {}
     showView(scene.setFree(freeCam));
   } else showView(scene.setView(k));
 }
-const VIEW_KEYS = { q: 'left', e: 'right', h: 'home', r: 'top', f: 'front', v: 'free', t: 'drape', a: 'annos' };
+const VIEW_KEYS = { q: 'left', e: 'right', h: 'home', r: 'top', f: 'front', v: 'rotate', g: 'drag', t: 'drape', a: 'annos' };
 document.addEventListener('keydown', e => {
   const k = VIEW_KEYS[e.key.toLowerCase()];
   if (k && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches('input, textarea')) viewAction(k);

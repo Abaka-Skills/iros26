@@ -48,6 +48,7 @@ GRASP_TIP = 0.008          # fingertips (the tool point) this far above the cube
                            # most of its faces (at its mid-height only the tapered tips pinched its top edge;
                            # at 5 mm the tips dragged on the table on the rig and stalled 30 mm apart)
 HELD_FILL = 0.2            # share of the view between the fingertips at their depth: something is held
+REPLAN_SHIFT = 0.004       # the cube's track moved this far since planning: the pick is planned again on it
 PLACED_WAIT = 4.0          # s for the cameras to see the placed cube on the target
 PLACED_TOL = 0.015         # a placed cube further than this from the target is picked and placed again
 REFIND_WAIT = 4.0          # s for the cameras to find the cube again after a failed try
@@ -132,6 +133,11 @@ class PickPlace(Mod):
             "help": "Keep going on its own until stopped: each round picks a random cube the cameras see (one "
                     "with nothing on it) and a random free place for it, on the table, in reach and at least "
                     "6 cm from every cube, and moves it there. track, target_x and target_y are ignored."})
+        across: bool = field(default=False, metadata={
+            "help": "auto_target: only places no arm that reaches the cube reaches, so the other arm takes it "
+                    "over (a handover every round; needs handover)."})
+        rounds: int = field(default=0, metadata={"help": "auto_target: end after this many rounds, done or "
+                                                         "failed (0: until stopped)."})
 
     STATES = {
         "idle": "not started",
@@ -214,20 +220,24 @@ class PickPlace(Mod):
 
     def _auto(self) -> None:
         """auto_target: round after round, a random cube to a random free place, until stopped. A round
-        that fails (every try missed, or nothing plannable) is left safe and followed by another."""
-        fails = 0
+        that fails (every try missed, or nothing plannable) is left safe and followed by another, unless
+        it was the last of `rounds`."""
+        fails, n = 0, 0
         while not self._halted():
             if self.state != "planning":
                 self.goto("planning")
+            n += 1
             try:
                 self._task(*self._choose())
                 fails = 0
             except (GaveUp, PlanningError) as e:
                 fails += 1
+                if n == self.params.rounds:
+                    raise
                 if fails >= AUTO_FAILS:
                     raise RuntimeError(f"{fails} rounds in a row failed; the last: {e}") from None
                 self.log.warning("round failed: %s; choosing again", e)
-            if self.params.dry_run:
+            if self.params.dry_run or n == self.params.rounds:
                 return
 
     def _choose(self) -> tuple[dict, dict]:
@@ -239,12 +249,20 @@ class PickPlace(Mod):
             o["level"] > c["level"] and np.hypot(o["x"] - c["x"], o["y"] - c["y"]) < SIZE for o in there)]
         if not movable:
             raise PlanningError("the cameras see no cube to move")
-        places = self._free_places(there)
+        places, reach = self._free_places(there)
         if not len(places):
             raise PlanningError(f"no place in reach at least {AUTO_GAP * 100:.0f} cm from every cube")
         why = ""
         for _ in range(AUTO_PAIRS):
-            cube, (x, y) = movable[rng.integers(len(movable))], places[rng.integers(len(places))]
+            cube, where = movable[rng.integers(len(movable))], places
+            if p.across:                          # out of reach of every arm that reaches the cube
+                at = np.array([[cube["x"], cube["y"], GRASP_TIP - SET_PRESS]])
+                mine = [s for s, T in self.robot.coordinates["T_W_base"].items() if self._reaches_down(T, at)[0]]
+                where = places[~np.any([reach[s] for s in mine], axis=0)] if mine else places
+                if not len(where):
+                    why = f"no free place out of the {' and '.join(mine)} arm's reach for cube {cube['track']}"
+                    continue
+            x, y = where[rng.integers(len(where))]
             p.track, p.target_x, p.target_y = cube["track"], round(float(x), 3), round(float(y), 3)
             try:
                 return cube, self._plan_task(cube)
@@ -252,25 +270,27 @@ class PickPlace(Mod):
                 why = str(e)
         raise PlanningError(f"none of {AUTO_PAIRS} random picks could be planned; the last: {why}")
 
-    def _free_places(self, there: list[dict]) -> np.ndarray:
+    def _free_places(self, there: list[dict]) -> tuple[np.ndarray, dict]:
         """(n, 2) W points, 1 cm apart: on the table (inside the area the tracker takes cubes in, see
         locate_cubes' workspace, and the safety boundary), where either follower reaches straight down
-        to put a cube, and AUTO_GAP from every cube."""
-        doc, m = self.robot.coordinates, reach_map()
+        to put a cube, and AUTO_GAP from every cube; and {side: (n,) where that follower reaches}."""
+        doc = self.robot.coordinates
         hx = min(abs(np.array(T)[0, 3]) for T in doc["T_W_mount"].values()) - 0.02 - AUTO_EDGE
         hy = 0.37 - AUTO_EDGE
         X, Y = np.meshgrid(np.arange(-hx, hx, 0.01), np.arange(-hy, hy, 0.01))
         P = np.c_[X.ravel(), Y.ravel(), np.full(X.size, GRASP_TIP - SET_PRESS)]
-        down = np.broadcast_to([0.0, 0.0, -1.0], P.shape)
         ok = self.robot.boundary.contains(P)
-        reach = np.zeros(len(P), bool)
-        for T in doc["T_W_base"].values():
-            T = np.array(T)
-            reach |= m.reaches(T, P, down) & m.reaches(T, P + [0, 0, HOVER], down)
-        ok &= reach
+        reach = {side: self._reaches_down(T, P) for side, T in doc["T_W_base"].items()}
+        ok &= np.any(list(reach.values()), axis=0)
         for c in there:
             ok &= np.hypot(P[:, 0] - c["x"], P[:, 1] - c["y"]) >= AUTO_GAP
-        return P[ok, :2]
+        return P[ok, :2], {side: r[ok] for side, r in reach.items()}
+
+    @staticmethod
+    def _reaches_down(T_W_B, P: np.ndarray) -> np.ndarray:
+        """(n,) where the arm on T_W_B reaches the W points P straight down, and HOVER above them."""
+        T, down = np.array(T_W_B), np.broadcast_to([0.0, 0.0, -1.0], P.shape)
+        return reach_map().reaches(T, P, down) & reach_map().reaches(T, P + [0, 0, HOVER], down)
 
     def _task(self, cube: dict, plans: dict | None = None) -> None:
         """Move `cube` to the target: tries, each recovered from, until one places it. `plans`: already
@@ -468,15 +488,16 @@ class PickPlace(Mod):
             watcher.join()
 
     def _recover(self, plans: dict) -> bool:
-        """After a failed try: every arm of the task opens its gripper, lifts its tool straight up to
-        clear the table (if it is down near it), and goes to its staged pose, out of the cameras' way."""
+        """After a failed try: every arm of the task opens its gripper (never closing it: fingers that
+        stopped wide, on top of the cube, would press on it), lifts its tool straight up to clear the
+        table (if it is down near it), and goes to its staged pose, out of the cameras' way."""
         for side, plan in plans.items():
             arm = self.robot.arms[f"follower_{side}"]
             kin, T_W_B = plan["kin"], plan["T_W_B"]
             T = T_W_B @ kin.fk(np.array(arm.positions()[:6]))
             up = {"kin": kin, "T_W_B": T_W_B, "points": {"up": np.array([*T[:2, 3], max(T[2, 3], self.travel + 0.03)])},
                   "R": {"up": T[:3, :3]}}
-            if not (self._gripper(arm, plan.get("open", OPEN)) and self._line(arm, up, "up", self.speed / 3)
+            if not (self._gripper(arm, max(plan.get("open", OPEN), arm.gripper_aperture())) and self._line(arm, up, "up", self.speed / 3)
                     and self._joint(arm, plan["staged"])):
                 return False
         return True
@@ -514,6 +535,7 @@ class PickPlace(Mod):
         self.goto("staging")
         if not self._joint(arm, plan["staged"]):
             return False
+        self._follow(plan)                        # the arm off its rest pose, a camera may see the cube better now
         self.goto("looking")                      # fingers open: closed, their tips hide the cube
         if not (self._joint(arm, plan["look"]) and self._gripper(arm, OPEN)):
             return False
@@ -533,6 +555,7 @@ class PickPlace(Mod):
             plan.update(self._replan(plan, seen))
         else:
             self.log.warning("the wrist camera did not find the cube; grasping where the tracker has it")
+            self._follow(plan)
         self.goto("approaching")                  # only as wide as the cubes around leave room for
         if not (self._joint(arm, plan["above_cube"]) and self._gripper(arm, plan["open"])):
             return False
@@ -554,6 +577,17 @@ class PickPlace(Mod):
         if why:
             raise Missed(f"missed the cube: {why}", here)
         return True
+
+    def _follow(self, plan) -> None:
+        """Plan the pick again where the tracker has the cube now, if that moved REPLAN_SHIFT or more
+        since planning (a camera that couldn't see it then, an arm at rest over it, may see it now)."""
+        now = self._cube(self.params.track)
+        if now is None or now["level"] is None:
+            return
+        moved = float(np.hypot(now["x"] - plan["cube"]["x"], now["y"] - plan["cube"]["y"]))
+        if moved >= REPLAN_SHIFT:
+            self.log.info("cube %d is %.1f mm from where it was planned: planning the pick again", now["track"], moved * 1000)
+            plan.update(self._replan(plan, now))
 
     def _check_held(self, arm, plan, gap: float, when: str) -> str:
         """'' if the arm holds the cube, else why not. Both have to say so: the gripper (its fingers
@@ -937,8 +971,8 @@ class PickPlace(Mod):
                             + ("" if p.handover else " (a handover may: handover=true)"))
 
     def _replan(self, plan, seen) -> dict:
-        """The plan again for the cube as the wrist camera saw it: the whole of it for one arm, the
-        pick for a giver (its handover doesn't depend on where the cube was)."""
+        """The plan again for the cube where it is now (as the wrist camera saw it, or the tracker has it):
+        the whole of it for one arm, the pick for a giver (its handover doesn't depend on where the cube was)."""
         kin, T_W_B, T_ee_cam, staged = plan["kin"], plan["T_W_B"], plan["T_ee_cam"], plan["staged"]
         if "place" in plan:
             return self._poses(kin, T_W_B, T_ee_cam, staged, seen, self.target)

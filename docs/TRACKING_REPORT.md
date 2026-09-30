@@ -84,8 +84,9 @@ Across the whole scene (all cubes, every frame):
   - While the cube swings to the handover point, or is carried to the target, 11 to 18% of frames have no
     detection within 5 cm of it at all.
 - **Evidence (frames captured mid-receiving and replayed per camera, truth (0.006, 0.081, 0.173)):**
-  - The low camera places the cube at (0.002, 0.075, 0.172): 2 mm off in xy, 1 mm in height.
-  - The giver's wrist camera places it at (−0.001, 0.078, 0.172).
+  - The low camera places the cube at (0.002, 0.075, 0.172): 7 mm off in xy, 1 mm in height.
+  - The giver's wrist camera places it at (−0.001, 0.078, 0.172): 8 mm off in xy. The two agree within 4 mm.
+    (An earlier version of this report said 2 mm for the low camera; that was a miscalculation.)
   - Both are side views, with σ about 14 mm, above `VAGUE_SIGMA` (12.5 mm). Fusion drops the in-air group they
     form, because it keeps a group only when one of its observations alone is precise.
   - The overhead camera's view of the cube then has no in-air cube to join. It is placed on the table at
@@ -180,3 +181,63 @@ Across the whole scene (all cubes, every frame):
 
 After each, measure the same way. The scripts (in `_claude_tmp/`, local, not in the repo) run the 10 scenes, log
 the frames and score them as above.
+
+## Fixes, 2026-09-29: measured the same way
+
+Same simulator (seed 11), calibration and 10 scenes as above. Tracks from the previous scene are cleared before
+each scene: the benchmark respawns cubes, which a real table never does, and the old spots, hidden by an arm at
+rest, were kept as occluded (correctly) and counted as ghosts. "Before" is the run above; "after" is the last run
+with every fix.
+
+| | before | after |
+|---|---|---|
+| tasks completed (all by handover) | 7 of 10 | 9 of 10 (10 of 10 in an earlier run the same day) |
+| moved cube while the other arm takes it (receiving) | 11.8 mm | 7.2 mm |
+| missing while handing over / carrying | 24% / 19% | 6% / 2% |
+| descending and grasping | 2.7 mm | 2.5 / 2.8 mm |
+| resting distractors | 5.1 mm (3.7 toward the overhead camera) | 4.0 mm |
+| ghost track-frames (near the moved cube) | 245 (117) | 35 (26) |
+
+What changed (`myaloha/cubes.py`, unless named):
+
+- **Findings 1 and 3, the cube in the air:**
+  - Vagueness is judged on a group of views together, after far views have joined it. Two side views that agree
+    now place the held cube.
+  - A far view joining a cube in the air takes on the height's uncertainty (`σz · tan` of its viewing angle).
+  - Views of the air closer than `AIR_APART` (1.2 cubes) are one cube, which removes the coloured copy.
+  - Every view counts by its σ, not the "top" views alone.
+  - A column only far views see is dropped when a close camera sees the table there.
+- **Finding 6, the resting bias:** a far view's blob is its top face and the sides facing the camera, swept
+  along the viewing ray. Its centroid is therefore off by (S/2)·cot(elevation) toward the camera, whatever the
+  cube's yaw, and the fix takes that back.
+  - Measured with an exact camera, the bias was 4.4 mm and is now under 1.5 mm (unit test).
+- **Finding 5, the blind spot:** a cube a table-level camera finds, where no camera able to place it can see (out
+  of frame, behind something nearer, or too far away to be precise), becomes a cube as that camera places it.
+  Runs 4 and 8 start now.
+  - Its position is vague (13 mm here). `pick_place` therefore plans the pick again when the track moves by
+    `REPLAN_SHIFT` (4 mm) or more: after staging (the arm off its rest pose, the overhead camera sees the cube)
+    and when the wrist camera can't measure it.
+  - Recovery never closes the gripper. Fingers that stopped wide, on top of the cube, were told to "open" to
+    45 mm, which pressed on it and raised an error.
+- **Tracker:**
+  - A track that missed the last frame is also tried as stopped where it was last seen. A jittery pair of
+    detections (a partial view 12 mm off) had given a resting track about 4 cm/s. One second later its
+    prediction was just past the 50 mm gate, and a duplicate was born; after the pick, it stayed as a ghost.
+  - A hidden track is kept on "occluded" evidence only if it rests on something (the table, or a track one level
+    under it). A cube in the air is in a gripper and moves with it; a lifted cube passing 37.5 mm reads as
+    resting at level 1.
+- **Colour (finding 4) is no longer a tracking problem.** After the fixes above, colour errors fell from 180 to
+  9–47 per 10 runs, spread over cameras and runs, whenever no purple cube came out bluish. What remains is one
+  mechanism: the simulator draws each cube's albedo again at every spawn (`errors.albedo`, 3 Lab units). A draw
+  about 3σ redder puts a purple cube half on the blue side of the `sim` profile:
+  - Every top view splits its pixels about evenly, and the cube reads blue for the whole run.
+  - In the last run, one such draw made 173 of the 209 colour errors, and it is why run 2 didn't start there.
+  - Physical cubes keep their colour, and the rig's profile is calibrated on the very cubes in use. Either the
+    simulator keeps each cube's albedo across spawns, or the `sim` profile is calibrated over several spawns.
+
+Still open:
+- **Fast moves (7).** The swing to the handover point outruns the tracker: a new track is born, and the live
+  error is about 12 mm.
+- **Live latency.** The output is about 0.3 s behind, twice the frame-time error while carrying.
+- **The rig drops under load.** Under this benchmark's load, the simulated rig still drops an arm or a camera
+  now and then (seen once: a task planned in that window failed with "a handover needs both followers").

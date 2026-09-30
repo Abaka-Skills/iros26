@@ -49,6 +49,7 @@ OVERLAP_IOU = 0.2                 # two cubes at one level overlapping more than
 HELD_APERTURE = (0.018, 0.034)
 FACE_SEEN = 0.6                   # share of `expect` a whole face fills at least, seen from far (the blur before
                                   # classifying costs a small blob its edge ring: 0.65 at 1 m, 11 px across)
+AIR_APART = 1.2 * SIZE            # observations of cubes in the air this close (centres, 3-D) are one cube
 VAGUE_SIGMA = SIZE / 2            # an observation expected off by half a cube or more places no cube by itself (see fuse)
 SIDE_DOWN = 30.0                  # deg: a camera at table level looking down less than this sees cube sides only
 RANGE_BIAS = 0.05                # D405 range error beyond ~0.5 m, as a fraction of the distance (measured
@@ -126,10 +127,15 @@ class Obs:
         return min(self.n, 400) / self.dist
 
     def place(self, top: float) -> None:
-        """Far view: put the face on the horizontal plane at height `top` (xy, yaw, spread, z)."""
+        """Far view: put the face on the horizontal plane at height `top` (xy, yaw, spread, z). The
+        blob is the top face and the sides facing the camera; placed on the top's plane, the sides
+        sweep the square toward the camera by a cube's height along the rays, so its centroid is off
+        by half that sweep, whatever the cube's turn: taken back."""
         s = (top - self.origin[2]) / self.rays[:, 2]
         X = self.origin[:2] + s[:, None] * self.rays[:, :2]
-        self.xy, self.yaw, self.z = X.mean(axis=0), _yaw(X), top - SIZE / 2
+        r = self.rays.mean(axis=0)
+        self.xy = X.mean(axis=0) + SIZE / 2 * r[:2] / abs(r[2])
+        self.yaw, self.z = _yaw(X), top - SIZE / 2
         self.spread = float(np.ptp(X, axis=0).max())
 
 
@@ -383,7 +389,7 @@ def probe(view: CameraView, labels, T_cam_W, xy, yaw) -> list[tuple]:
     return out
 
 
-def fuse(obs: list[Obs], side: list = ()) -> list[dict]:
+def fuse(obs: list[Obs], side: list = (), views: list = (), blind: list = ()) -> list[dict]:
     """Cubes from every camera's observations; see the module docstring. An observation joins the
     nearest column within MERGE_RADIUS, or within a gate sized by both expected errors: the same
     cube, or another in its stack, seen less precisely by another camera. The gate is capped at 1.6
@@ -395,15 +401,24 @@ def fuse(obs: list[Obs], side: list = ()) -> list[dict]:
     position in 3-D, and a far view whose rays, placed at such a cube's top, land on it belongs to
     it (it is the highest thing there). No hidden cubes are assumed under them.
 
-    A vague observation (sigma over VAGUE_SIGMA: a wrist camera half a metre away, reading long, or a
-    side face alone, its centre guessed half a cube behind) joins a cube a precise camera sees, but
-    alone makes none: placed by it, a resting cube would jump and a ghost appear beside it. Where only
-    such a camera sees one, the tracker keeps the track on the depth evidence, where it was last seen
-    well."""
+    A cube needs the cameras that see it to place it within VAGUE_SIGMA together (their errors combined):
+    one wrist camera half a metre away (reading long), or one side face alone (its centre guessed half a
+    cube behind), is too vague to make one; placed by it, a resting cube would jump and a ghost appear
+    beside it. Two such views that agree are not. Where only a vague view sees a cube, the tracker keeps
+    the track on the depth evidence, where it was last seen well.
+
+    A column only far views see is a cube on the table unless a camera close enough to tell (`views`,
+    not at table level) sees the table there: then it is something higher up no close camera placed (a
+    cube in a gripper), not on the table.
+
+    `blind`: resting cubes a table-level camera found. Those it only answers about, but one far from
+    every cube the others found, where none of `views` that could place it can see (out of frame, or
+    something nearer in the way: an arm at rest over it), is a cube as that camera places it, however
+    vague: there is no better view for it to be a ghost beside."""
     air, obs = _in_air([o for o in obs if o.level is None and o.z is not None],
                        [o for o in obs if o.level is not None or o.z is None])
     cols = [c for c in _cluster(obs, lambda c, o: any(p.cam == o.cam and p.level == o.level for p in c))
-            if min(o.sigma for o in c) <= VAGUE_SIGMA]
+            if _sigma(c) <= VAGUE_SIGMA]
     inverse = [inv_T(view.T_W_cam) for view, _ in side]
     cubes = []
     for col in cols:
@@ -422,6 +437,8 @@ def fuse(obs: list[Obs], side: list = ()) -> list[dict]:
                     if lv > top_lv:
                         break                                      # nothing above an empty level
         measured = bool(near) or bool(seen)
+        if not measured and (0 in empty or any(evidence(v, np.array([*cxy, SIZE / 2])) == "empty" for v in views)):
+            continue                                               # far views only, and the table seen there
         top_lv = max([top_lv, *seen])
         for o in col:
             if o.level is None:
@@ -456,6 +473,15 @@ def fuse(obs: list[Obs], side: list = ()) -> list[dict]:
             cubes.append({"color": NAMES[label], **base, "x": round(float(xy[0]), 4), "y": round(float(xy[1]), 4),
                           "yaw": round(yaws[0], 1) if yaws else None, "visible": True,
                           "confidence": round(float(conf), 2), "sigma": round(float(sig), 4)})
+    for o in sorted(blind, key=lambda o: o.sigma):
+        P = np.array([*o.xy, (o.level + 0.5) * SIZE])
+        if any(np.hypot(c["x"] - o.xy[0], c["y"] - o.xy[1]) < SIZE + o.sigma for c in cubes) \
+                or not all(_blocked(v, P) for v in views):
+            continue
+        cubes.append({"color": NAMES[o.label], "x": round(float(o.xy[0]), 4), "y": round(float(o.xy[1]), 4),
+                      "z": round(float(P[2]), 4), "level": o.level, "level_measured": True, "seen_by": [o.cam],
+                      "yaw": None, "visible": True, "confidence": round(min(1.0, o.n / 60), 2),
+                      "sigma": round(o.sigma, 4)})
     return resolve_overlaps(cubes + air)
 
 
@@ -463,14 +489,17 @@ def _in_air(near: list[Obs], rest: list[Obs]) -> tuple[list[dict], list[Obs]]:
     """(cubes in the air, the observations left for the columns). Near observations of cubes in the
     air group by 3-D position (one per camera per cube); a far view joins one when its rays, placed
     at that cube's top, land within the gate."""
-    groups = [g for g in _cluster(near, lambda g, o: any(p.cam == o.cam for p in g) or abs(_z(g) - o.z) > SIZE / 2)
-              if min(o.sigma for o in g) <= VAGUE_SIGMA]
+    groups = _cluster(near, lambda g, o: any(p.cam == o.cam for p in g) or abs(_z(g) - o.z) > SIZE / 2)
+    groups = _merge_close(groups)
     left = []
     for o in rest:
         if o.z is None and groups:                  # a far view: the cube in the air above, if it is that
             for g in sorted(groups, key=lambda g: -_z(g)):
                 o.place(_z(g) + SIZE / 2)
                 if np.linalg.norm(_xy(g) - o.xy) < max(MERGE_RADIUS, 2 * np.hypot(o.sigma, g[0].sigma)):
+                    # placed at a height the close views measured: their error, along the ray, is its too
+                    r = o.rays.mean(axis=0)
+                    o.sigma = float(np.hypot(o.sigma, _sigma(g) * np.hypot(r[0], r[1]) / abs(r[2])))
                     g.append(o)
                     break
             else:
@@ -480,19 +509,41 @@ def _in_air(near: list[Obs], rest: list[Obs]) -> tuple[list[dict], list[Obs]]:
             left.append(o)
     out = []
     for g in groups:
+        if _sigma(g) > VAGUE_SIGMA:                 # too vague together (see fuse)
+            continue
         votes = np.zeros(len(NAMES))
         for o in g:
             votes[o.label] += o.vote
-        label, src = int(votes.argmax()), [o for o in g if o.top] or g
-        xy, z = _xy(src), _z([o for o in g if o.rays is None])
+        label = int(votes.argmax())                 # every view counts by its error: in the air no view is sure
+        xy, z = _xy(g), _z([o for o in g if o.rays is None])
         yaws = [o.yaw for o in sorted(g, key=lambda o: o.sigma) if o.top and o.yaw is not None]
         conf = votes[label] / votes.sum() * min(1.0, sum(o.n for o in g) / 60)
         out.append({"color": NAMES[label], "x": round(float(xy[0]), 4), "y": round(float(xy[1]), 4),
                     "z": round(float(z), 4), "level": None, "level_measured": True,
                     "seen_by": sorted({o.cam for o in g}), "yaw": round(yaws[0], 1) if yaws else None,
                     "visible": True, "confidence": round(float(conf), 2),
-                    "sigma": round(float(1 / np.sqrt(sum(1 / o.sigma ** 2 for o in src))), 4)})
+                    "sigma": round(_sigma(g), 4)})
     return out, left
+
+
+def _merge_close(groups: list[list[Obs]]) -> list[list[Obs]]:
+    """Groups of observations in the air whose centres are nearer than AIR_APART (3-D) are one cube:
+    two cubes can't overlap, and a gripper holds one. (Seen from below, fingers hiding its top edge, a
+    held cube reads lower, and the light there shifts its colour: the same cube, not one under it.)"""
+    out: list[list[Obs]] = []
+    for g in sorted(groups, key=_sigma):
+        c = np.array([*_xy(g), _z(g)])
+        near = next((h for h in out if np.linalg.norm(np.array([*_xy(h), _z(h)]) - c) < AIR_APART), None)
+        if near is None:
+            out.append(g)
+        else:
+            near += g
+    return out
+
+
+def _sigma(group: list[Obs]) -> float:
+    """The expected position error of the group's cameras together."""
+    return float(1 / np.sqrt(sum(1 / o.sigma ** 2 for o in group)))
 
 
 def _cluster(obs: list[Obs], clash) -> list[list[Obs]]:
@@ -563,20 +614,35 @@ def is_side(view: CameraView) -> bool:
 def locate(views: list[CameraView], workspace=(0.5, 0.5), pool=None) -> tuple[list[dict], dict]:
     """(cubes, per-camera info). `workspace`: half extents (x, y) in W where cubes can be. Cameras
     above the table find the cubes; table-level ones find cubes in the air, and answer, per found
-    column and level, whether a cube is there and its colour. Only what the cameras see: nothing is inferred from the
-    arms (a cube is not assumed to be in a gripper because its fingers stopped apart). With an
-    executor `pool`, cameras are processed in parallel (OpenCV and numpy release the GIL)."""
+    column and level, whether a cube is there and its colour. Where no camera above can see (an arm
+    over it), a table-level camera's cube is taken as it is (see fuse). Only what the cameras see:
+    nothing is inferred from the arms (a cube is not assumed to be in a gripper because its fingers
+    stopped apart). With an executor `pool`, cameras are processed in parallel (OpenCV and numpy
+    release the GIL)."""
     def one(v):
         found = observe(v, workspace)
         if is_side(v):              # a cube in the air it may find; the stacks, it only answers about
-            return v, [o for o in found if o.level is None]
-        return None, found
-    obs, side = [], []
-    for v, found in (pool.map(one, views) if pool else map(one, views)):
+            return v, [o for o in found if o.level is None], [o for o in found if o.level is not None]
+        return None, found, []
+    obs, side, blind = [], [], []
+    for v, found, resting in (pool.map(one, views) if pool else map(one, views)):
         obs += found
+        blind += resting
         if v is not None and v.labels is not None:
             side.append((v, v.labels))
-    return fuse(obs, side), {v.key: v.info for v in views}
+    return fuse(obs, side, [v for v in views if not is_side(v)], blind), {v.key: v.info for v in views}
+
+
+def _blocked(view: CameraView, P: np.ndarray) -> bool:
+    """The view can't see P (W) well enough to place a cube there: behind it, out of its frame,
+    something nearer in the way, or a close camera too far off to place one (VAGUE_SIGMA)."""
+    Pc = apply_T(inv_T(view.T_W_cam), P[None])[0]
+    if Pc[2] < 0.05 or (depth_noise(Pc[2]) <= SIZE / 3 and near_sigma(view, Pc[2]) > VAGUE_SIGMA):
+        return True
+    xd, yd = distort_norm(np.array([Pc[0] / Pc[2]]), np.array([Pc[1] / Pc[2]]), view.dist, view.model)
+    u, v = xd[0] * view.K[0, 0] + view.K[0, 2], yd[0] * view.K[1, 1] + view.K[1, 2]
+    h, w = view.depth.shape
+    return not (0 <= u < w and 0 <= v < h) or evidence(view, P) == "hidden"
 
 
 def evidence(view: CameraView, P: np.ndarray) -> str | None:
@@ -624,19 +690,29 @@ class Tracker:
     confirmed track no camera detects now is asked about of every camera (`evidence`): one that sees
     past where it was drops it at once (gone); one whose depth shows it there, or something in front
     of it, keeps it (`unseen`: 'undetected' or 'occluded') for as long as that holds; with neither,
-    it is kept `hold_s` after it was last seen (`held`), then dropped. An undetected track is
-    reported where it was last seen. Colour is voted over the detections of the `hold_s` before it
-    was last seen."""
+    it is kept `hold_s` after it was last seen (`held`), then dropped. A track in the air isn't kept for
+    being occluded: nothing floats, a cube up there is in a gripper and moves with it, so where it was
+    last seen says little once something hides it. In the air is also a level above 0 with no track
+    under it (a lifted cube passing that height reads as resting there). An undetected track is reported where
+    it was last seen. Colour is voted over the detections of the `hold_s` before it
+    was last seen.
+
+    A track that missed the last frame may have stopped: detections are also tried against where it
+    was last seen, at rest (REST_DRIFT), and the nearer of the two explains the detection. Velocity
+    from two jittery detections, carried on through a second unseen, would otherwise take the
+    prediction out of the gate, and a new track would start beside the old one."""
 
     KEEP = ("level", "level_measured", "yaw", "visible", "confidence", "sigma", "seen_by")
     ACCEL = 0.15                    # m/s^2, the process noise: how hard a gripper accelerates a cube (discrete white-noise acceleration)
     GATE_MAX = 2 * SIZE
     V0 = 0.05                       # m/s, a new track's velocity uncertainty (most cubes rest)
+    REST_DRIFT = 0.0035             # m/sqrt(s): how far a stopped track's position may have wandered
 
     def __init__(self, confirm: int = 2, hold_s: float = 1.0):
         self.confirm, self.hold_s = confirm, hold_s
         self.tracks: list[dict] = []
         self._next = 1
+        self._t: float | None = None     # the last update's time
 
     @staticmethod
     def _noise(c: dict) -> np.ndarray:
@@ -662,8 +738,22 @@ class Tracker:
                       [np.eye(3) * q * dt ** 3 / 2, np.eye(3) * q * dt ** 2]])
         return F @ tr["x"], F @ tr["P"] @ F.T + Q
 
-    def _update(self, tr: dict, c: dict, t: float) -> None:
-        x, P = self._predict(tr, t)
+    def _rests(self, tr: dict) -> bool:
+        """The track is a cube resting on something: the table, or a track one level under it."""
+        lv = tr["level"]
+        return lv is not None and (lv == 0 or any(
+            o["level"] == lv - 1 and np.hypot(*(o["x"][:2] - tr["x"][:2])) < SIZE / 2 for o in self.tracks))
+
+    def _rest(self, tr: dict, t: float) -> tuple[np.ndarray, np.ndarray]:
+        """The track stopped where it was last seen: no velocity, its position a little looser."""
+        x, P = tr["x"].copy(), tr["P"].copy()
+        x[3:], P[3:, :], P[:, 3:] = 0.0, 0.0, 0.0
+        P[:3, :3] += np.eye(3) * self.REST_DRIFT ** 2 * (t - tr["seen"])
+        P[3:, 3:] = np.eye(3) * self.V0 ** 2
+        return x, P
+
+    def _update(self, tr: dict, c: dict, t: float, rest: bool = False) -> None:
+        x, P = (self._rest if rest else self._predict)(tr, t)
         m, R = np.array([c["x"], c["y"], c["z"]]), np.diag(self._noise(c))
         if c["level"] is not None and tr["level"] is not None and c["level"] != tr["level"]:
             x[2], x[5] = m[2], 0.0                       # a resting cube read a level off: its height jumps
@@ -674,24 +764,33 @@ class Tracker:
         tr["x"], tr["P"] = x + K @ (m - x[:3]), (np.eye(6) - K[:, :3] @ np.eye(3, 6)) @ P
 
     def update(self, found: list[dict], t: float, views=()) -> list[dict]:
-        pred = [self._predict(tr, t) for tr in self.tracks]
+        pred = [[(self._predict(tr, t), False)] + ([(self._rest(tr, t), True)] if self._t and tr["seen"] < self._t else [])
+                for tr in self.tracks]              # a track that missed the last frame: moving on, or stopped
         hue = [self._color(tr) for tr in self.tracks]
+        self._t = t
 
         def near(i, c):
-            """(cost, allowed) of detection c for track i: the distance to its prediction, half a cube
-            more for another colour than the track's (a misread still matches when nothing closer does)."""
-            (x, P), m = pred[i], np.array([c["x"], c["y"], c["z"]])
-            dxy, dz = float(np.hypot(*(m[:2] - x[:2]))), abs(m[2] - x[2])
-            gate = min(self.GATE_MAX, max(MERGE_RADIUS, 3 * np.sqrt(P[0, 0] + P[1, 1] + 2 * c["sigma"] ** 2)))
-            other = c["color"] and hue[i] and c["color"] != hue[i]
-            return dxy + dz + (SIZE / 2 if other else 0.0), dxy < gate and dz <= 1.2 * SIZE
-        pairs = sorted((cost, i, j) for i in range(len(self.tracks)) for j, c in enumerate(found)
-                       for cost, ok in [near(i, c)] if ok)
-        match, used = {}, set()
-        for _, i, j in pairs:                        # nearest pairs first
+            """(cost, allowed, rest) of detection c for track i: the distance to its nearer prediction,
+            half a cube more for another colour than the track's (a misread still matches when nothing
+            closer does)."""
+            m, best = np.array([c["x"], c["y"], c["z"]]), (np.inf, False, False)
+            for (x, P), rest in pred[i]:
+                dxy, dz = float(np.hypot(*(m[:2] - x[:2]))), abs(m[2] - x[2])
+                gate = min(self.GATE_MAX, max(MERGE_RADIUS, 3 * np.sqrt(P[0, 0] + P[1, 1] + 2 * c["sigma"] ** 2)))
+                ok = dxy < gate and dz <= 1.2 * SIZE
+                cost = dxy + dz + (SIZE / 2 if c["color"] and hue[i] and c["color"] != hue[i] else 0.0)
+                if ok and cost < best[0]:
+                    best = (cost, True, rest)
+            return best
+        pairs = sorted((cost, i, j, rest) for i in range(len(self.tracks)) for j, c in enumerate(found)
+                       for cost, ok, rest in [near(i, c)] if ok)
+        match, used, stopped = {}, set(), set()
+        for _, i, j, rest in pairs:                  # nearest pairs first
             if j not in match and i not in used:
                 match[j] = self.tracks[i]
                 used.add(i)
+                if rest:
+                    stopped.add(j)
         for j, c in enumerate(found):
             tr = match.get(j)
             if tr is None:
@@ -708,7 +807,7 @@ class Tracker:
                 self.tracks.append(tr)
                 match[j] = tr
             else:
-                self._update(tr, c, t)
+                self._update(tr, c, t, rest=j in stopped)
             tr.update({k: c[k] for k in self.KEEP})
             tr["hits"] += 1
             tr["seen"] = t
@@ -723,7 +822,7 @@ class Tracker:
                     continue                         # a camera sees past it: gone
                 if said & {"hidden", "there"}:
                     tr["unseen"] = "occluded" if "hidden" in said else "undetected"
-            if t - tr["seen"] <= self.hold_s or tr["unseen"]:
+            if t - tr["seen"] <= self.hold_s or tr["unseen"] == "undetected" or (tr["unseen"] and self._rests(tr)):
                 kept.append(tr)
         self.tracks = kept
         out = []
